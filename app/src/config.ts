@@ -52,7 +52,7 @@ export const PLANS: Plan[] = [
   },
   {
     name: 'Enterprise',
-    price: 'From $25k',
+    price: '$25k+',
     period: 'per year',
     blurb: 'Self-hosted collaboration, SSO and procurement paperwork.',
     features: ['Unlimited apps', 'Real-time collaboration server', 'SOC 2 report, DPA, custom terms', 'Dedicated engineer & SLA'],

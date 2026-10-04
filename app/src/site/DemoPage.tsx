@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
-import { Viewer } from '../viewer/Viewer';
+import { LazyViewer as Viewer } from './LazyViewer';
 import { BRAND } from '../config';
 import { Logo, ThemeToggle } from './Landing';
 

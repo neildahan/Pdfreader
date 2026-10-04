@@ -811,6 +811,9 @@
   width: 96px;
   text-overflow: ellipsis;
 }
+.mg-close-panel {
+  display: none !important;
+}
 .mg-avatar {
   display: inline-grid;
   place-items: center;
@@ -1178,6 +1181,12 @@
   }
   .mg-hint {
     display: none;
+  }
+  .mg-close-panel {
+    display: inline-grid !important;
+  }
+  .mg-thumbs-toggle {
+    display: none !important;
   }
   .mg-tool[data-tip]:hover::after {
     display: none;

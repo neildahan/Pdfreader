@@ -118,7 +118,7 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
   const [fit, setFit] = useState(true);
   const [current, setCurrent] = useState(0);
   const [showThumbs, setShowThumbs] = useState(!compact);
-  const [showComments, setShowComments] = useState(true);
+  const [showComments, setShowComments] = useState(() => window.innerWidth > 900);
   const [author, setAuthorState] = useState(() => readAuthor(authorProp));
   const [signature, setSignature] = useState<Point[][] | null>(null);
   const [sigOpen, setSigOpen] = useState(false);
@@ -471,7 +471,7 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
       <header className="mg-toolbar">
         <div className="mg-toolbar-left">
           {!compact && (
-            <button className={`mg-icon-btn ${showThumbs ? 'is-on' : ''}`} title="Pages" onClick={() => setShowThumbs((v) => !v)}>
+            <button className={`mg-icon-btn mg-thumbs-toggle ${showThumbs ? 'is-on' : ''}`} title="Pages" onClick={() => setShowThumbs((v) => !v)}>
               <PanelLeft size={18} />
             </button>
           )}
@@ -734,6 +734,7 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
               onAuthor={setAuthor}
               dispatch={dispatch}
               onSelect={selectFromPanel}
+              onClose={() => setShowComments(false)}
             />
           </aside>
         )}

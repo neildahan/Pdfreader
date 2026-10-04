@@ -15,7 +15,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { Viewer } from '../viewer/Viewer';
+import { LazyViewer as Viewer } from './LazyViewer';
 import { BRAND, CONTACT, FOUNDING_OFFER, PLANS } from '../config';
 
 const SAMPLE = `${import.meta.env.BASE_URL}sample.pdf`;
@@ -228,12 +228,16 @@ function FoundingForm() {
           </select>
         </label>
         <label>
-          What do you pay per year? <span className="optional">optional</span>
+          <span>
+            Yearly spend today <span className="optional">optional</span>
+          </span>
           <input name="currentSpend" placeholder="e.g. $28,000" />
         </label>
       </div>
       <label>
-        What are you building? <span className="optional">optional</span>
+        <span>
+          What are you building? <span className="optional">optional</span>
+        </span>
         <textarea name="useCase" rows={3} placeholder="Contract review in our legal platform, ~2,000 users…" />
       </label>
       <button className="btn btn-primary btn-lg" disabled={state === 'sending'}>
@@ -305,9 +309,9 @@ export function Landing() {
             <Sparkles size={14} /> Founding customers get {FOUNDING_OFFER.discount} <ArrowRight size={14} />
           </a>
           <h1>
-            The PDF SDK
+            The PDF SDK with
             <br />
-            with <span className="marker">honest pricing</span>.
+            <span className="marker">honest pricing</span>.
           </h1>
           <p className="hero-sub">
             Drop-in PDF viewing, annotation, comments and signatures for your web app. One public price per plan — no document metering, no revenue audits,

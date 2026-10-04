@@ -47,8 +47,9 @@ export function SignaturePad({ onCancel, onUse }: { onCancel: () => void; onUse:
             force((n) => n + 1);
           }}
           onPointerUp={() => {
-            if (current.current) setPaths((p) => [...p, current.current!]);
+            const stroke = current.current;
             current.current = null;
+            if (stroke) setPaths((p) => [...p, stroke]);
           }}
         >
           <line x1="40" x2="460" y1="150" y2="150" className="mg-sigline" />

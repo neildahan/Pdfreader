@@ -5,4 +5,6 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  // The viewer chunk is mostly pdf.js and is lazy-loaded.
+  build: { chunkSizeWarningLimit: 1500 },
 });

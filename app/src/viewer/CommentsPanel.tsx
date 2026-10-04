@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Check, CornerDownRight, Highlighter, MessageSquare, MousePointerClick, PenLine, RotateCcw, Square, Circle, MoveUpRight, Type, Underline, Strikethrough, StickyNote, Signature, Trash2 } from 'lucide-react';
+import { Check, CornerDownRight, Highlighter, MessageSquare, MousePointerClick, PenLine, RotateCcw, Square, Circle, MoveUpRight, Type, Underline, Strikethrough, StickyNote, Signature, Trash2, X } from 'lucide-react';
 import type { AnnAction } from './store';
 import { TOOL_LABELS, type Annotation } from './types';
 import { uid } from './geometry';
@@ -170,6 +170,7 @@ export const CommentsPanel = memo(function CommentsPanel({
   onAuthor,
   dispatch,
   onSelect,
+  onClose,
 }: {
   annotations: Annotation[];
   selectedId: string | null;
@@ -178,6 +179,7 @@ export const CommentsPanel = memo(function CommentsPanel({
   onAuthor: (n: string) => void;
   dispatch: (a: AnnAction) => void;
   onSelect: (id: string) => void;
+  onClose: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>('all');
   const sorted = [...annotations].sort((a, b) => a.page - b.page || a.createdAt - b.createdAt);
@@ -194,6 +196,9 @@ export const CommentsPanel = memo(function CommentsPanel({
           <Avatar name={author} />
           <input className="mg-input bare" value={author} onChange={(e) => onAuthor(e.target.value)} onKeyDown={(e) => e.stopPropagation()} aria-label="Your name" />
         </label>
+        <button className="mg-icon-btn sm mg-close-panel" onClick={onClose} aria-label="Close comments">
+          <X size={16} />
+        </button>
       </div>
       <div className="mg-segmented">
         {(['all', 'open', 'resolved'] as Filter[]).map((f) => (
