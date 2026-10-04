@@ -1,0 +1,29 @@
+{
+  "name": "margin-pdf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/copy-pdfjs-assets.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/copy-pdfjs-assets.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "sample": "node scripts/make-sample.mjs",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "lucide-react": "^1.52.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2"
+  }
+}
