@@ -4,9 +4,11 @@ import { DemoPage } from './site/DemoPage';
 
 // Hash routing keeps the build deployable to any static host without rewrites.
 function useRoute() {
-  const [route, setRoute] = useState(() => window.location.hash.replace(/^#/, '') || '/');
+  // Accepts both "#/demo" and "#demo".
+  const read = () => window.location.hash.replace(/^#\/?/, '');
+  const [route, setRoute] = useState(read);
   useEffect(() => {
-    const on = () => setRoute(window.location.hash.replace(/^#/, '') || '/');
+    const on = () => setRoute(read());
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
@@ -15,6 +17,6 @@ function useRoute() {
 
 export function App() {
   const route = useRoute();
-  if (route.startsWith('/demo')) return <DemoPage />;
+  if (route.startsWith('demo')) return <DemoPage />;
   return <Landing />;
 }
