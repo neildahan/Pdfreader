@@ -61,13 +61,13 @@ const COMPARISON: [string, string, string][] = [
   ['Pricing', 'Quote-only, after sales calls', 'Public price list'],
   ['What it’s based on', 'Your revenue, users or document volume', 'Number of apps. That’s it.'],
   ['Core features', 'Annotations, signatures, redaction sold as add-ons', 'Included in every paid plan'],
-  ['Contract', 'Multi-year commitments', 'Annual, cancel any time'],
+  ['Contract', 'Multi-year commitments', 'Annual terms, no multi-year lock-in'],
   ['Renewals', 'Uncapped increases', 'Capped at 5% per year, in writing'],
-  ['Time to first render', 'Days of trial paperwork', 'npm install, five minutes'],
+  ['Trying it', 'Days of trial paperwork', 'Open the demo, drop in your own PDF'],
 ];
 
 const FEATURES = [
-  { icon: Zap, title: 'Fast, accurate rendering', text: 'Opens large documents instantly with crisp text at any zoom, progressive page loading and a small bundle.' },
+  { icon: Zap, title: 'Accurate rendering', text: 'Built on pdf.js: crisp text at any zoom, with pages loaded progressively as you scroll.' },
   { icon: PenTool, title: 'Every annotation tool', text: 'Highlight, underline, strike, pen, shapes, arrows, text boxes, sticky notes and signatures — with undo, move and resize.' },
   { icon: MessagesSquare, title: 'Comment threads', text: 'Every annotation carries a discussion: replies, resolve and reopen, authors and timestamps.' },
   { icon: FileCheck2, title: 'Acrobat-compatible', text: 'Export real PDF annotations that stay editable in Acrobat, Preview and Chrome — or flatten them. Import existing ones too.' },
@@ -78,7 +78,7 @@ const FEATURES = [
 const FAQ = [
   {
     q: 'Is Margin available today?',
-    a: `We’re onboarding a small group of founding customers now. The viewer on this page is the real core. Founding customers lock in ${FOUNDING_OFFER.discount} with a ${FOUNDING_OFFER.deposit}; your plan only starts when you ship to production.`,
+    a: `Not generally available yet. Today there is a working demo and a founding-customer program with 20 spots. The viewer on this page is the real core. Founding customers lock in ${FOUNDING_OFFER.discount} with a ${FOUNDING_OFFER.deposit}; your plan only starts when you ship to production.`,
   },
   {
     q: 'What does “honest pricing” mean?',
@@ -94,7 +94,7 @@ const FAQ = [
   },
   {
     q: 'Which frameworks are supported?',
-    a: 'React, Vue, Angular and plain JavaScript on the web. React Native and Flutter wrappers are on the roadmap for founding customers.',
+    a: 'The demo is built in React. There is no published package yet: the plan is a framework-agnostic core with a React component first, then Vue and Angular wrappers in the order founding customers need them. React Native and Flutter are planned, not built. Tell us which you need.',
   },
   {
     q: 'What if it doesn’t work out?',
@@ -155,11 +155,18 @@ function FoundingForm() {
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    const { _gotcha, ...data } = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    // Honeypot: people never see this field, bots fill it. Pretend it worked.
+    if (_gotcha) {
+      setState('sent');
+      return;
+    }
     if (CONTACT.formEndpoint) {
       setState('sending');
       try {
-        const res = await fetch(CONTACT.formEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(data) });
+        // Formspree reads `_subject` for the notification email and replies to `email`.
+        const payload = { ...data, _subject: `Founding customer: ${data.company || data.name} (${data.plan})` };
+        const res = await fetch(CONTACT.formEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) });
         setState(res.ok ? 'sent' : 'error');
       } catch {
         setState('error');
@@ -234,6 +241,10 @@ function FoundingForm() {
           <input name="currentSpend" placeholder="e.g. $28,000" />
         </label>
       </div>
+      <label className="form-hp" aria-hidden="true">
+        Leave this empty
+        <input name="_gotcha" tabIndex={-1} autoComplete="off" />
+      </label>
       <label>
         <span>
           What are you building? <span className="optional">optional</span>
@@ -394,7 +405,7 @@ export function Landing() {
         </div>
       </Section>
 
-      <Section id="developers" eyebrow="Developers" title="Five minutes from npm install to annotated PDF." sub="Typed APIs, framework components and events for every change, so you can store annotations wherever you want.">
+      <Section id="developers" eyebrow="Developers" title="What the API will look like." sub="A preview of the planned API, not a published package yet. Events for every change, so you can store annotations wherever you want.">
         <div className="dev">
           <div className="code-card">
             <div className="code-tabs">
@@ -413,8 +424,8 @@ export function Landing() {
             <li>
               <Code2 size={18} />
               <div>
-                <strong>Framework-native</strong>
-                <span>React, Vue, Angular and vanilla JS. Full TypeScript types.</span>
+                <strong>React first</strong>
+                <span>The demo is React. Plain JS, Vue and Angular wrappers are planned, with TypeScript types in the package.</span>
               </div>
             </li>
             <li>
@@ -435,7 +446,7 @@ export function Landing() {
         </div>
       </Section>
 
-      <Section id="pricing" eyebrow="Pricing" title="Prices you can read. On a website. Today." sub="Billed annually in USD. Unlimited users and documents on every paid plan.">
+      <Section id="pricing" eyebrow="Pricing" title="Prices you can read. On a website. Today." sub="Billed annually in USD. Unlimited users and documents on every paid plan. These are launch prices: today Margin is a live demo and a founding-customer program.">
         <div className="founding-banner">
           <Sparkles size={18} />
           <span>
@@ -473,13 +484,13 @@ export function Landing() {
           <div className="founding-copy">
             <span className="eyebrow">Founding customers</span>
             <h2>Lock in {FOUNDING_OFFER.discount}.</h2>
-            <p className="lead">We’re working closely with a small group of teams to shape the roadmap. You get our engineers on Slack, input into priorities, and a price that never goes up.</p>
+            <p className="lead">We’re working closely with a small group of teams to shape the roadmap. You get a direct line to the person building it, a say in priorities, and half price for life, with renewals capped at 5%.</p>
             <ul className="founding-list">
               <li>
                 <Check size={16} /> {FOUNDING_OFFER.deposit} — your plan starts when you go live
               </li>
               <li>
-                <Check size={16} /> Direct Slack channel with the engineering team
+                <Check size={16} /> A direct channel to the founder for support and feedback
               </li>
               <li>
                 <Check size={16} /> Vote on the roadmap: mobile, forms, redaction, collaboration

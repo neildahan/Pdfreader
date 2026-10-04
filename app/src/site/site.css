@@ -744,6 +744,14 @@ button {
   color: var(--text-3);
   text-align: center;
 }
+/* Spam honeypot: off-screen rather than display:none, which some bots skip. */
+.form .form-hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
 .form-error {
   margin: 0;
   color: var(--no);

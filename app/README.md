@@ -35,6 +35,7 @@ Everything is in `src/config.ts`:
 
 - `CONTACT.email`: where founding-customer requests go (currently a placeholder, `founders@example.com`).
 - `CONTACT.formEndpoint`: set a Formspree/Basin/etc. URL to collect sign-ups without email.
+- Both `CONTACT` values can instead come from the `VITE_FORM_ENDPOINT` and `VITE_CONTACT_EMAIL` environment variables at build time, so they can be set in the hosting dashboard. Deploy steps: `gtm/DEPLOY.md`.
 - `PLANS` and `FOUNDING_OFFER`: prices, plan features, discount, number of spots.
 - `BRAND`: product name. "Margin" is a working name; check trademark availability before using it.
 

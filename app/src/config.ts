@@ -7,11 +7,15 @@ export const BRAND = {
 
 /**
  * Where founding-customer requests go. With `formEndpoint` set (e.g. a Formspree
- * or Basin URL) the form posts there; otherwise it opens an email to `email`.
+ * URL like https://formspree.io/f/abcdwxyz) the form posts there; otherwise it
+ * opens an email to `email`. Both can also be set without editing code, through
+ * the VITE_FORM_ENDPOINT and VITE_CONTACT_EMAIL environment variables on your
+ * host (Netlify, Vercel, GitHub Actions). Those win over the values below; an
+ * unset or blank variable falls back to them.
  */
 export const CONTACT = {
-  email: 'founders@example.com',
-  formEndpoint: '',
+  email: import.meta.env.VITE_CONTACT_EMAIL?.trim() || 'founders@example.com',
+  formEndpoint: import.meta.env.VITE_FORM_ENDPOINT?.trim() || '',
 };
 
 export type Plan = {
@@ -37,7 +41,7 @@ export const PLANS: Plan[] = [
     name: 'Startup',
     price: '$5,000',
     period: 'per year',
-    blurb: 'For one production app. Buy it online in two minutes.',
+    blurb: 'For one production app. A public price, no sales call needed.',
     features: ['1 production app', 'Unlimited users & documents', 'Annotations, comments, signatures', 'Email support, 2 business days'],
     cta: 'Reserve founding price',
   },
@@ -46,7 +50,7 @@ export const PLANS: Plan[] = [
     price: '$12,000',
     period: 'per year',
     blurb: 'Everything most teams need, with a real support SLA.',
-    features: ['Up to 3 production apps', 'Unlimited users & documents', 'Redaction & forms', 'Priority support, 1 business day', 'Security review package'],
+    features: ['Up to 3 production apps', 'Unlimited users & documents', 'Redaction & forms (planned)', 'Priority support, 1 business day', 'Security review package (planned)'],
     cta: 'Reserve founding price',
     highlight: true,
   },
@@ -54,8 +58,8 @@ export const PLANS: Plan[] = [
     name: 'Enterprise',
     price: '$25k+',
     period: 'per year',
-    blurb: 'Self-hosted collaboration, SSO and procurement paperwork.',
-    features: ['Unlimited apps', 'Real-time collaboration server', 'SOC 2 report, DPA, custom terms', 'Dedicated engineer & SLA'],
+    blurb: 'For many apps, custom terms and procurement paperwork.',
+    features: ['Unlimited apps', 'Real-time collaboration server (planned)', 'SOC 2 report (planned), DPA, custom terms', 'Dedicated engineer & SLA'],
     cta: 'Talk to us',
   },
 ];
