@@ -2,7 +2,8 @@
 # One-time setup: repo Settings > Pages > Build and deployment > Source: "GitHub Actions".
 # The github-pages environment only accepts the default branch unless other branches are added
 # under Settings > Environments > github-pages. Full steps: gtm/DEPLOY.md.
-# Optional: set repository variables VITE_FORM_ENDPOINT and VITE_CONTACT_EMAIL
+# Optional: set repository variables VITE_FORM_ENDPOINT, VITE_CONTACT_EMAIL,
+# VITE_COLLAB_URL (live collaboration server) and VITE_AI_ENDPOINT (AI proxy)
 # (Settings > Secrets and variables > Actions > Variables) to configure the sign-up form.
 name: Deploy demo to GitHub Pages
 
@@ -42,6 +43,8 @@ jobs:
         env:
           VITE_FORM_ENDPOINT: ${{ vars.VITE_FORM_ENDPOINT }}
           VITE_CONTACT_EMAIL: ${{ vars.VITE_CONTACT_EMAIL }}
+          VITE_COLLAB_URL: ${{ vars.VITE_COLLAB_URL }}
+          VITE_AI_ENDPOINT: ${{ vars.VITE_AI_ENDPOINT }}
 
       - uses: actions/configure-pages@v6
 

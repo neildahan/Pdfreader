@@ -6,10 +6,19 @@ import { Logo, ThemeToggle } from './Landing';
 const SAMPLE = `${import.meta.env.BASE_URL}sample.pdf`;
 
 // #/demo/s/<token> opens a share link; #/demo/live/<room> joins a live session.
-function readLink(): { share?: string; room?: string; key: string } {
+// A live link may carry the collaboration server after "~" (base64url), so invitees connect to the same one.
+function readLink(): { share?: string; room?: string; server?: string; key: string } {
   const m = /^#\/?demo\/(s|live)\/([^/?#]+)/.exec(window.location.hash);
   if (!m) return { key: 'demo' };
-  return m[1] === 's' ? { share: m[2], key: `s-${m[2].slice(0, 24)}` } : { room: m[2], key: `live-${m[2]}` };
+  if (m[1] === 's') return { share: m[2], key: `s-${m[2].slice(0, 24)}` };
+  const [room, srv] = m[2].split('~');
+  let server: string | undefined;
+  try {
+    server = srv ? atob(srv.replace(/-/g, '+').replace(/_/g, '/')) : undefined;
+  } catch {
+    server = undefined;
+  }
+  return { room, server, key: `live-${room}` };
 }
 
 export function DemoPage() {
@@ -32,7 +41,7 @@ export function DemoPage() {
         </div>
       </div>
       <div className="demo-frame">
-        <Viewer key={link.key} src={SAMPLE} share={link.share} room={link.room} />
+        <Viewer key={link.key} src={SAMPLE} share={link.share} room={link.room} collabServer={link.server} />
       </div>
     </div>
   );

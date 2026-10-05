@@ -179,7 +179,7 @@ export const CommentsPanel = memo(function CommentsPanel({
   onAuthor: (n: string) => void;
   dispatch: (a: AnnAction) => void;
   onSelect: (id: string) => void;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>('all');
   const sorted = [...annotations].sort((a, b) => a.page - b.page || a.createdAt - b.createdAt);
@@ -196,9 +196,11 @@ export const CommentsPanel = memo(function CommentsPanel({
           <Avatar name={author} />
           <input className="mg-input bare" value={author} onChange={(e) => onAuthor(e.target.value)} onKeyDown={(e) => e.stopPropagation()} aria-label="Your name" />
         </label>
-        <button className="mg-icon-btn sm mg-close-panel" onClick={onClose} aria-label="Close comments">
-          <X size={16} />
-        </button>
+        {onClose && (
+          <button className="mg-icon-btn sm mg-close-panel" onClick={onClose} aria-label="Close comments">
+            <X size={16} />
+          </button>
+        )}
       </div>
       <div className="mg-segmented">
         {(['all', 'open', 'resolved'] as Filter[]).map((f) => (

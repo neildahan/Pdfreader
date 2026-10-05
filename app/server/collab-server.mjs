@@ -80,13 +80,16 @@ wss.on('connection', (ws, req) => {
     switch (m.t) {
       case 'hello':
         peerId = m.peer?.id ?? null;
-        if (!r.fp) setDoc(r, m.fp, m.name);
+        if (m.switch) setDoc(r, m.fp, m.name);
+        else if (!r.fp) setDoc(r, m.fp, m.name);
+        // Someone on the room's document with nobody else around: send what we remember.
+        if (m.fp && m.fp === r.fp && r.annotations.size) ws.send(JSON.stringify({ t: 'sync', id: 'server', fp: r.fp, annotations: [...r.annotations.values()] }));
         break;
       case 'sync':
         if (m.fp !== r.fp) {
-          // Someone who just joined may still be on another file while the room's
-          // document is on its way to them; only a person alone can switch it.
-          if (r.fp && r.clients.size > 1) break;
+          // A newcomer may still be on another file while the room's document is on its
+          // way to them. Only an explicit switch, or an empty room, changes the document.
+          if (r.fp && !m.switch) break;
           setDoc(r, m.fp, null);
         }
         for (const a of m.annotations ?? []) upsert(r, a);

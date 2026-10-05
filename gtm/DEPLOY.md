@@ -143,6 +143,25 @@ DNS changes usually take a few minutes, occasionally a few hours. The site works
 
 ---
 
+## F. Live collaboration server (optional)
+
+Share links and the AI assistant work on any static host. Live sessions between different people need the small server in `app/server/collab-server.mjs` (one file, one dependency).
+
+1. Create a free account on [Render](https://render.com) (or Railway / Fly.io).
+2. New > **Web Service** > connect this repository. Root directory: `app`. Build command: `npm ci`. Start command: `node server/collab-server.mjs`.
+3. Add an environment variable `ALLOWED_ORIGINS` with your site's address, e.g. `https://neildahan.github.io` (comma-separate several). This stops other sites from using your server.
+4. When it's live, copy its address and change `https://` to `wss://`, e.g. `wss://margin-collab.onrender.com`.
+5. On your site's host, add the variable `VITE_COLLAB_URL` with that address and redeploy (GitHub: Settings > Secrets and variables > Actions > Variables).
+6. Test: open the demo, Share > Live session > Start, and open the link on your phone.
+
+Without this server, "Start live session" still works between tabs in one browser, which is fine for showing the feature. The server keeps rooms in memory: a restart clears them, and empty rooms are dropped after an hour. Free Render instances sleep when idle, so the first connection can take ~30 seconds.
+
+## G. AI assistant (optional)
+
+Prospects can try the assistant by pasting their own Anthropic API key in the Assistant tab; nothing to deploy. If you want visitors to try it without a key, run `app/server/ai-proxy.mjs` with *your* key, the same way as step F (start command `node server/ai-proxy.mjs`, environment variables `ANTHROPIC_API_KEY` and `ALLOWED_ORIGIN`), then set `VITE_AI_ENDPOINT` on your site's host.
+
+Be careful: a public endpoint with your key lets anyone who finds it spend your credits. Add the auth check marked in the file, or set a low monthly spend limit in the Anthropic console before you share it.
+
 ## Before you send the link to anyone
 
 - [ ] Form connected (step D) and tested with a real submission.

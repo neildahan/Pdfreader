@@ -53,6 +53,11 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
   latest.current = { doc, ann, onDoc };
   const incoming = useRef<{ fp: string; name: string; parts: string[]; total: number } | null>(null);
   const lastSent = useRef<Annotation[] | null>(null);
+  /** What the server last told us about the room's document. */
+  const roomDoc = useRef<{ fp: string | null; hasDoc: boolean }>({ fp: null, hasDoc: false });
+  /** Fingerprint of a document we received from the session (opening it isn't a "switch"). */
+  const adopted = useRef<string | null>(null);
+  const prevFp = useRef<string | null>(null);
 
   const peersRef = useRef(peers);
   peersRef.current = peers;
@@ -66,19 +71,35 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
     for (let seq = 0; seq < total; seq++) send({ t: 'doc', id: me.current.id, fp: d.fingerprint, name: d.name, seq, total, chunk: b64.slice(seq * CHUNK, (seq + 1) * CHUNK) });
   }, [send]);
 
-  const announce = useCallback(() => {
-    const d = latest.current.doc;
-    send({ t: 'hello', peer: me.current, fp: d?.fingerprint ?? null, name: d?.name });
-    if (d) send({ t: 'sync', id: me.current.id, fp: d.fingerprint, annotations: latest.current.ann.annotations });
-  }, [send]);
+  const announce = useCallback(
+    (switching = false) => {
+      const d = latest.current.doc;
+      const mine = d?.fingerprint ?? null;
+      send({ t: 'hello', peer: me.current, fp: mine, name: d?.name, ...(switching ? { switch: true } : {}) });
+      if (!d) return;
+      const room = roomDoc.current;
+      // The room is on another document: adopt it instead of pushing ours.
+      if (room.fp && room.fp !== mine && !switching) {
+        if (room.hasDoc && !incoming.current) send({ t: 'doc-req', id: me.current.id, fp: room.fp });
+        return;
+      }
+      send({ t: 'sync', id: me.current.id, fp: mine!, annotations: latest.current.ann.annotations, ...(switching ? { switch: true } : {}) });
+      // Give the server a copy so people joining later get the file even if we've left.
+      if (transport.current?.kind === 'server' && !(room.fp === mine && room.hasDoc)) {
+        sendDoc();
+        roomDoc.current = { fp: mine, hasDoc: true };
+      }
+    },
+    [send, sendDoc],
+  );
 
   useEffect(() => {
     if (!room) return;
     const t: Transport = server ? new ServerTransport(roomUrl(server, room)) : new TabsTransport(room);
     transport.current = t;
     t.onStatus = setStatus;
-    if (t instanceof ServerTransport) t.onOpen = announce;
-    else queueMicrotask(announce);
+    // With a server, wait for its 'state' message (what it knows about the room) before announcing.
+    if (!(t instanceof ServerTransport)) queueMicrotask(() => announce());
 
     t.onMessage = (m) => {
       const { doc: d } = latest.current;
@@ -92,13 +113,15 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
             send({ t: 'here', peer: me.current, fp: mine, name: d?.name, to: m.peer.id });
             if (d && m.fp === mine) send({ t: 'sync', id: me.current.id, fp: d.fingerprint, annotations: latest.current.ann.annotations });
           }
-          // They're on a different document than us: ask for it.
-          if (m.fp && m.fp !== mine && !incoming.current) send({ t: 'doc-req', id: me.current.id, fp: m.fp });
+          // Newcomers adopt the document of people already here; a deliberate switch moves everyone.
+          const follow = m.t === 'here' || (m.t === 'hello' && m.switch);
+          if (follow && m.fp && m.fp !== mine && !incoming.current) send({ t: 'doc-req', id: me.current.id, fp: m.fp });
           return;
         }
         case 'state':
+          roomDoc.current = { fp: m.fp, hasDoc: m.hasDoc };
           if (m.annotations.length && m.fp === mine) dispatch({ type: 'remote', ops: m.annotations.map((annotation) => ({ kind: 'upsert', annotation })) });
-          if (m.fp && m.fp !== mine && m.hasDoc) send({ t: 'doc-req', id: me.current.id, fp: m.fp });
+          announce();
           return;
         case 'bye':
           setPeers((ps) => ps.filter((p) => p.id !== m.id));
@@ -137,6 +160,8 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
           if (have === inc.total) {
             incoming.current = null;
             setReceiving(null);
+            adopted.current = inc.fp;
+            roomDoc.current = { fp: inc.fp, hasDoc: true };
             latest.current.onDoc(fromBase64(inc.parts.join('')), inc.name);
           }
           return;
@@ -160,7 +185,12 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
   // When our document changes (opened a file, or received one), re-announce so others can sync with us.
   const fp = doc?.fingerprint;
   useEffect(() => {
-    if (room && fp && transport.current) announce();
+    const before = prevFp.current;
+    prevFp.current = fp ?? null;
+    // Opening a different file mid-session (not one received from the session) moves everyone to it.
+    const switching = !!before && !!fp && fp !== before && fp !== adopted.current;
+    if (switching) roomDoc.current = { fp: null, hasDoc: false };
+    if (room && fp && transport.current) announce(switching);
     // New baseline: annotations loaded with the document aren't "edits" to broadcast.
     lastSent.current = latest.current.ann.annotations;
   }, [fp, room, announce]);
@@ -177,6 +207,17 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
     for (const a of prev) if (!now.has(a.id)) ops.push({ kind: 'remove', id: a.id });
     if (ops.length) send({ t: 'ops', id: me.current.id, fp: doc.fingerprint, ops });
   }, [ann, room, doc, send]);
+
+  // Tell others when our display name changes.
+  const named = useRef(name);
+  useEffect(() => {
+    if (!room || named.current === name) return;
+    const t = setTimeout(() => {
+      named.current = name;
+      send({ t: 'hello', peer: me.current, fp: latest.current.doc?.fingerprint ?? null, name: latest.current.doc?.name });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [name, room, send]);
 
   // Drop cursors that went quiet.
   useEffect(() => {

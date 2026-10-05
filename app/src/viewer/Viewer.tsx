@@ -105,6 +105,8 @@ export type ViewerProps = {
   share?: string;
   /** Live session to join (#/demo/live/<room>). */
   room?: string;
+  /** Collaboration server for that session, when the link names one. */
+  collabServer?: string;
 };
 
 type Toast = { id: number; text: string };
@@ -125,7 +127,7 @@ function readCollabServer() {
   }
 }
 
-export function Viewer({ src, compact = false, author: authorProp = 'You', share, room: roomProp }: ViewerProps) {
+export function Viewer({ src, compact = false, author: authorProp = 'You', share, room: roomProp, collabServer: serverProp }: ViewerProps) {
   const [doc, setDoc] = useState<LoadedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -159,7 +161,7 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
   const [pendingShare, setPendingShare] = useState<SharePayload | null>(null);
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [room, setRoom] = useState<string | null>(roomProp ?? null);
-  const [collabServer, setCollabServerState] = useState(readCollabServer);
+  const [collabServer, setCollabServerState] = useState(() => serverProp ?? readCollabServer());
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -183,12 +185,20 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
     }
   };
 
+  // Only the most recent open() may install its document (a slow initial load must not
+  // replace a file opened or received meanwhile).
+  const openSeq = useRef(0);
   const open = useCallback(
     async (data: ArrayBuffer | Uint8Array, name: string, url: string | null = null) => {
+      const seq = ++openSeq.current;
       setLoading(true);
       setError(null);
       try {
         const loaded = await loadDocument(data, name);
+        if (seq !== openSeq.current) {
+          loaded.pdf.loadingTask.destroy();
+          return;
+        }
         setDocUrl(url);
         indexRef.current = new TextIndex(loaded.pdf);
         const saved = loadSaved(loaded.fingerprint);
@@ -206,9 +216,9 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
         scrollRef.current?.scrollTo({ top: 0 });
         if (!saved && loaded.imported.length) toast(`Imported ${loaded.imported.length} existing annotation${loaded.imported.length > 1 ? 's' : ''}`);
       } catch (e) {
-        setError(e instanceof Error && e.name === 'PasswordException' ? 'This PDF is password protected.' : 'Could not open this file. Is it a valid PDF?');
+        if (seq === openSeq.current) setError(e instanceof Error && e.name === 'PasswordException' ? 'This PDF is password protected.' : 'Could not open this file. Is it a valid PDF?');
       } finally {
-        setLoading(false);
+        if (seq === openSeq.current) setLoading(false);
       }
     },
     [toast],
@@ -229,8 +239,10 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
         }
       }
       try {
+        const ticket = openSeq.current;
         const buf = await (await fetch(url)).arrayBuffer();
-        if (!cancelled) open(buf, url.split('/').pop() || 'document.pdf', url);
+        // Skip if another document was opened (or received) while this one downloaded.
+        if (!cancelled && ticket === openSeq.current) open(buf, url.split('/').pop() || 'document.pdf', url);
       } catch {
         setError('Could not load the document.');
       }
@@ -273,11 +285,12 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
     }
   };
 
-  const liveLink = room ? demoLink(`live/${room}`) : null;
+  const liveSuffix = (id: string) => (collabServer && collabServer !== COLLAB_SERVER ? `${id}~${btoa(collabServer).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}` : id);
+  const liveLink = room ? demoLink(`live/${liveSuffix(room)}`) : null;
   const startLive = () => {
     const id = randomId();
     setRoom(id);
-    if (!compact) history.replaceState(null, '', `#/demo/live/${id}`);
+    if (!compact) history.replaceState(null, '', `#/demo/live/${liveSuffix(id)}`);
   };
   const stopLive = () => {
     setRoom(null);
@@ -890,6 +903,9 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
               <button role="tab" aria-selected={rightTab === 'assistant'} className={rightTab === 'assistant' ? 'is-active' : ''} onClick={() => setRightTab('assistant')}>
                 <Sparkles size={15} /> Assistant
               </button>
+              <button className="mg-icon-btn sm mg-close-panel mg-tabs-close" onClick={() => setShowComments(false)} aria-label="Close panel">
+                <X size={16} />
+              </button>
             </div>
             {rightTab === 'assistant' ? (
               <AssistantPanel settings={aiSettings} onSettings={setAiSettings} getDocText={getDocText} locate={locate} onJump={jumpTo} onHighlight={highlightFromAi} seed={aiSeed} />
@@ -902,7 +918,6 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
               onAuthor={setAuthor}
               dispatch={dispatch}
               onSelect={selectFromPanel}
-              onClose={() => setShowComments(false)}
             />
             )}
           </aside>

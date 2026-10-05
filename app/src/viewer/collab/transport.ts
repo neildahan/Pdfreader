@@ -5,12 +5,13 @@ export type Peer = { id: string; name: string; color: string };
 
 /** Everything participants exchange. `fp` is the document fingerprint; edits for another document are ignored. */
 export type CollabMsg =
-  | { t: 'hello'; peer: Peer; fp: string | null; name?: string }
+  /** `switch`: the sender just opened a different file and everyone should follow. */
+  | { t: 'hello'; peer: Peer; fp: string | null; name?: string; switch?: boolean }
   | { t: 'here'; peer: Peer; fp: string | null; name?: string; to: string }
   | { t: 'bye'; id: string }
   | { t: 'cursor'; id: string; page: number; x: number; y: number }
   | { t: 'ops'; id: string; fp: string; ops: RemoteOp[] }
-  | { t: 'sync'; id: string; fp: string; annotations: Annotation[] }
+  | { t: 'sync'; id: string; fp: string; annotations: Annotation[]; switch?: boolean }
   | { t: 'doc-req'; id: string; fp: string }
   | { t: 'doc'; id: string; fp: string; name: string; seq: number; total: number; chunk: string }
   /** Sent by the server to a client that just joined: what it remembers about the room. */

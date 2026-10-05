@@ -10,8 +10,10 @@ import {
   Moon,
   PenTool,
   ScanSearch,
+  Share2,
   Sparkles,
   Sun,
+  Users,
   X,
   Zap,
 } from 'lucide-react';
@@ -73,9 +75,16 @@ const FEATURES = [
   { icon: FileCheck2, title: 'Acrobat-compatible', text: 'Export real PDF annotations that stay editable in Acrobat, Preview and Chrome — or flatten them. Import existing ones too.' },
   { icon: ScanSearch, title: 'Search & selection', text: 'Full-text search with hit navigation and native text selection across pages.' },
   { icon: Lock, title: 'Documents stay with you', text: 'Everything runs in the browser. Files never touch our servers, which keeps your security review short.' },
+  { icon: Sparkles, title: 'AI that cites the page', text: 'Ask questions, get summaries and find clauses. Every answer links to the exact passage, and one click turns it into a highlight. Uses your own Anthropic key.' },
+  { icon: Share2, title: 'Share with a link', text: 'Send annotations and comment threads in a single link. The annotations travel inside the link itself, so nothing is uploaded.' },
+  { icon: Users, title: 'Review together, live', text: 'Live cursors, instant annotations and replies, and the file sent to everyone who joins. Runs on a small server you host yourself.' },
 ];
 
 const FAQ = [
+  {
+    q: 'How does the AI assistant work, and who sees our documents?',
+    a: 'You bring your own Anthropic API key, so you pay Anthropic directly and there is no AI markup from us. The document text goes only to Anthropic. For production, point the viewer at a small endpoint on your own server that holds the key (we include an example), so the key never reaches your users’ browsers. Answers cite the exact passage, and quotes that can’t be found in the document are flagged instead of highlighted.',
+  },
   {
     q: 'Is Margin available today?',
     a: `Not generally available yet. Today there is a working demo and a founding-customer program with 20 spots. The viewer on this page is the real core. Founding customers lock in ${FOUNDING_OFFER.discount} with a ${FOUNDING_OFFER.deposit}; your plan only starts when you ship to production.`,
@@ -325,8 +334,8 @@ export function Landing() {
             <span className="marker">honest pricing</span>.
           </h1>
           <p className="hero-sub">
-            Drop-in PDF viewing, annotation, comments and signatures for your web app. One public price per plan — no document metering, no revenue audits,
-            no add-on maze.
+            Drop-in PDF viewing, annotation, live collaboration and an AI assistant for your web app. One public price per plan: no document metering, no
+            revenue audits, no add-on maze.
           </p>
           <div className="hero-ctas">
             <a href="#/demo" className="btn btn-primary btn-lg">

@@ -49,6 +49,16 @@ export function mergeAnnotations(base: Annotation[], incoming: Annotation[]): An
   return applyOps(base, incoming.map((annotation) => ({ kind: 'upsert', annotation })));
 }
 
+/**
+ * Undo/redo bring back older copies of annotations. Re-stamp the ones that change
+ * so collaborators accept them as the newest version.
+ */
+function restamp(target: Annotation[], current: Annotation[]): Annotation[] {
+  const now = Date.now();
+  const cur = new Map(current.map((a) => [a.id, a]));
+  return target.map((a) => (cur.get(a.id) === a ? a : ({ ...a, updatedAt: now } as Annotation)));
+}
+
 export function annReducer(state: AnnState, action: AnnAction): AnnState {
   switch (action.type) {
     case 'add':
@@ -87,12 +97,12 @@ export function annReducer(state: AnnState, action: AnnAction): AnnState {
     case 'undo': {
       if (!state.past.length) return state;
       const prev = state.past[state.past.length - 1];
-      return { annotations: prev, past: state.past.slice(0, -1), future: [state.annotations, ...state.future], source: 'local' };
+      return { annotations: restamp(prev, state.annotations), past: state.past.slice(0, -1), future: [state.annotations, ...state.future], source: 'local' };
     }
     case 'redo': {
       if (!state.future.length) return state;
       const [next, ...rest] = state.future;
-      return { annotations: next, past: [...state.past, state.annotations], future: rest, source: 'local' };
+      return { annotations: restamp(next, state.annotations), past: [...state.past, state.annotations], future: rest, source: 'local' };
     }
   }
 }

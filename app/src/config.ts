@@ -42,7 +42,7 @@ export const PLANS: Plan[] = [
     price: '$5,000',
     period: 'per year',
     blurb: 'For one production app. A public price, no sales call needed.',
-    features: ['1 production app', 'Unlimited users & documents', 'Annotations, comments, signatures', 'Email support, 2 business days'],
+    features: ['1 production app', 'Unlimited users & documents', 'Annotations, comments, signatures', 'Share links and AI assistant (your own key)', 'Email support, 2 business days'],
     cta: 'Reserve founding price',
   },
   {
@@ -50,7 +50,7 @@ export const PLANS: Plan[] = [
     price: '$12,000',
     period: 'per year',
     blurb: 'Everything most teams need, with a real support SLA.',
-    features: ['Up to 3 production apps', 'Unlimited users & documents', 'Redaction & forms (planned)', 'Priority support, 1 business day', 'Security review package (planned)'],
+    features: ['Up to 3 production apps', 'Unlimited users & documents', 'Live collaboration (self-hosted server)', 'Redaction & forms (planned)', 'Priority support, 1 business day', 'Security review package (planned)'],
     cta: 'Reserve founding price',
     highlight: true,
   },
@@ -59,7 +59,7 @@ export const PLANS: Plan[] = [
     price: '$25k+',
     period: 'per year',
     blurb: 'For many apps, custom terms and procurement paperwork.',
-    features: ['Unlimited apps', 'Real-time collaboration server (planned)', 'SOC 2 report (planned), DPA, custom terms', 'Dedicated engineer & SLA'],
+    features: ['Unlimited apps', 'Help running collaboration at scale', 'SOC 2 report (planned), DPA, custom terms', 'Dedicated engineer & SLA'],
     cta: 'Talk to us',
   },
 ];

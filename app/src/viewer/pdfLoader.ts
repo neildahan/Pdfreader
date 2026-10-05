@@ -11,7 +11,7 @@ import {
   PDFString,
   type PDFObject,
 } from 'pdf-lib';
-import { rgbToHex, uid, unionRects, normRect } from './geometry';
+import { rgbToHex, unionRects, normRect } from './geometry';
 import type { Annotation, PageSize, Point } from './types';
 
 const ASSETS = `${import.meta.env.BASE_URL}pdfjs/`;
@@ -42,6 +42,8 @@ type RawAnnot = {
   fontSize?: number;
   borderWidth: number;
   margin?: Annotation;
+  /** Stable id: the annotation's /NM name, or its position in the file. */
+  key: string;
 };
 
 const IMPORTABLE = new Set(['Highlight', 'Underline', 'StrikeOut', 'Squiggly', 'Ink', 'Square', 'Circle', 'Line', 'FreeText', 'Text']);
@@ -120,6 +122,7 @@ async function extractAnnotations(bytes: Uint8Array): Promise<{ raw: RawAnnot[];
         fontSize: fontMatch ? parseFloat(fontMatch[1]) : undefined,
         borderWidth: bw instanceof PDFNumber ? bw.asNumber() : 1,
         margin,
+        key: text(dict.get(PDFName.of('NM'))) || `imp-${pageIndex}-${raw.length}`,
       });
       removed.add(ref);
     }
@@ -150,7 +153,7 @@ function toAnnotation(r: RawAnnot, vp: PageViewport): Annotation | null {
   };
   const rectOf = (q: number[]) => normRect(pt(q[0], q[1]), pt(q[2], q[3]));
   const base = {
-    id: uid(),
+    id: r.key,
     page: r.page,
     color: r.color ?? '#FFD43B',
     opacity: r.opacity,
