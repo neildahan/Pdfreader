@@ -38,6 +38,50 @@ export class TextIndex {
     return { text, spans };
   }
 
+  async texts(numPages: number): Promise<string[]> {
+    const out: string[] = [];
+    for (let i = 0; i < numPages; i++) out.push((await this.page(i)).text);
+    return out;
+  }
+
+  /**
+   * Finds `quote` on a page and returns its rectangles. Tolerates whitespace,
+   * case and typographic-quote differences; falls back to the quote's opening words.
+   */
+  async locate(pageIndex: number, quote: string): Promise<Rect[]> {
+    const { text, spans } = await this.page(pageIndex);
+    const norm = (c: string) => (/\s/.test(c) ? ' ' : c.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').toLowerCase());
+    // Normalised copy of the page text plus a map back to original indices.
+    let flat = '';
+    const map: number[] = [];
+    for (let i = 0; i < text.length; i++) {
+      const c = norm(text[i]);
+      if (c === ' ' && flat.endsWith(' ')) continue;
+      flat += c;
+      map.push(i);
+    }
+    const q = Array.from(quote.trim()).map(norm).join('').replace(/ +/g, ' ');
+    let at = flat.indexOf(q);
+    let len = q.length;
+    if (at === -1 && q.length > 30) {
+      const head = q.slice(0, 30);
+      at = flat.indexOf(head);
+      len = head.length;
+    }
+    if (at === -1) return [];
+    const start = map[at];
+    const end = map[Math.min(at + len, map.length) - 1] + 1;
+    const rects: Rect[] = [];
+    for (const s of spans) {
+      if (s.end <= start || s.start >= end) continue;
+      const n = Math.max(1, s.end - s.start);
+      const a = (Math.max(start, s.start) - s.start) / n;
+      const b = (Math.min(end, s.end) - s.start) / n;
+      rects.push({ x: s.rect.x + s.rect.w * a, y: s.rect.y, w: s.rect.w * (b - a), h: s.rect.h });
+    }
+    return rects;
+  }
+
   async search(query: string, numPages: number): Promise<SearchHit[]> {
     const q = query.trim().toLowerCase();
     if (!q) return [];

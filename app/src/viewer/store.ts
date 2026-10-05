@@ -4,7 +4,12 @@ export type AnnState = {
   annotations: Annotation[];
   past: Annotation[][];
   future: Annotation[][];
+  /** Who caused the last change, so collaboration only broadcasts local edits. */
+  source: 'local' | 'remote' | 'load';
 };
+
+/** A change received from another participant. */
+export type RemoteOp = { kind: 'upsert'; annotation: Annotation } | { kind: 'remove'; id: string };
 
 export type AnnAction =
   | { type: 'add'; annotation: Annotation }
@@ -14,13 +19,34 @@ export type AnnAction =
   | { type: 'set'; annotations: Annotation[]; history?: boolean }
   | { type: 'checkpoint' }
   | { type: 'undo' }
-  | { type: 'redo' };
+  | { type: 'redo' }
+  | { type: 'remote'; ops: RemoteOp[] }
+  | { type: 'merge'; annotations: Annotation[] };
 
 const LIMIT = 100;
 
 function commit(state: AnnState, annotations: Annotation[], history = true): AnnState {
-  if (!history) return { ...state, annotations };
-  return { annotations, past: [...state.past, state.annotations].slice(-LIMIT), future: [] };
+  if (!history) return { ...state, annotations, source: 'local' };
+  return { annotations, past: [...state.past, state.annotations].slice(-LIMIT), future: [], source: 'local' };
+}
+
+function applyOps(list: Annotation[], ops: RemoteOp[]): Annotation[] {
+  let out = list;
+  for (const op of ops) {
+    if (op.kind === 'remove') {
+      out = out.filter((a) => a.id !== op.id);
+      continue;
+    }
+    const i = out.findIndex((a) => a.id === op.annotation.id);
+    if (i === -1) out = [...out, op.annotation];
+    else if (op.annotation.updatedAt >= out[i].updatedAt) out = out.map((a, j) => (j === i ? op.annotation : a));
+  }
+  return out;
+}
+
+/** Union by id; the most recently updated copy wins. */
+export function mergeAnnotations(base: Annotation[], incoming: Annotation[]): Annotation[] {
+  return applyOps(base, incoming.map((annotation) => ({ kind: 'upsert', annotation })));
 }
 
 export function annReducer(state: AnnState, action: AnnAction): AnnState {
@@ -44,19 +70,29 @@ export function annReducer(state: AnnState, action: AnnAction): AnnState {
     case 'remove':
       return commit(state, state.annotations.filter((a) => a.id !== action.id));
     case 'set':
-      return action.history ? commit(state, action.annotations) : { annotations: action.annotations, past: [], future: [] };
+      return action.history ? commit(state, action.annotations) : { annotations: action.annotations, past: [], future: [], source: 'load' };
+    case 'merge':
+      return commit(state, mergeAnnotations(state.annotations, action.annotations));
+    case 'remote':
+      // Patch every history snapshot too, so undo only reverts this user's own edits.
+      return {
+        annotations: applyOps(state.annotations, action.ops),
+        past: state.past.map((snap) => applyOps(snap, action.ops)),
+        future: state.future.map((snap) => applyOps(snap, action.ops)),
+        source: 'remote',
+      };
     case 'checkpoint':
       // Records the current state so a series of un-tracked edits (a drag) undoes as one step.
-      return { ...state, past: [...state.past, state.annotations].slice(-LIMIT), future: [] };
+      return { ...state, past: [...state.past, state.annotations].slice(-LIMIT), future: [], source: 'local' };
     case 'undo': {
       if (!state.past.length) return state;
       const prev = state.past[state.past.length - 1];
-      return { annotations: prev, past: state.past.slice(0, -1), future: [state.annotations, ...state.future] };
+      return { annotations: prev, past: state.past.slice(0, -1), future: [state.annotations, ...state.future], source: 'local' };
     }
     case 'redo': {
       if (!state.future.length) return state;
       const [next, ...rest] = state.future;
-      return { annotations: next, past: [...state.past, state.annotations], future: rest };
+      return { annotations: next, past: [...state.past, state.annotations], future: rest, source: 'local' };
     }
   }
 }

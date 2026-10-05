@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef, useState, type RefObject } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { TextLayer } from './pdfjs';
-import { MessageSquare, Trash2 } from 'lucide-react';
+import { MessageSquare, Sparkles, Trash2 } from 'lucide-react';
+import type { Cursor } from './collab/useCollab';
 import { AnnotationLayer, type ToolStyle } from './AnnotationLayer';
 import { bbox, mergeLineRects, uid } from './geometry';
 import type { AnnAction } from './store';
@@ -27,6 +28,12 @@ type Props = {
   onCreated: (a: Annotation) => void;
   onEditText: (id: string | null) => void;
   onOpenComment: (id: string) => void;
+  onAskAI: (a: Annotation) => void;
+  /** Briefly highlighted passage (e.g. an AI citation the user jumped to). */
+  flashRects: Rect[];
+  /** Other participants' cursors on this page (live sessions). */
+  cursors: Cursor[];
+  onCursor?: (page: number, x: number, y: number) => void;
 };
 
 const MAX_CANVAS_PIXELS = 16_000_000;
@@ -170,6 +177,15 @@ function PageViewInner(props: Props) {
       onPointerDown={(e) => {
         if (tool === 'select' && !(e.target as Element).closest('.mg-annot, .mg-popover, .mg-text-editor')) props.onSelect(null);
       }}
+      onPointerMove={
+        props.onCursor
+          ? (e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              props.onCursor!(index, (e.clientX - r.left) / scale, (e.clientY - r.top) / scale);
+            }
+          : undefined
+      }
+      onPointerLeave={props.onCursor ? () => props.onCursor!(-1, 0, 0) : undefined}
     >
       <canvas ref={canvasRef} className="mg-canvas" />
       {!rendered && <div className="mg-page-skeleton" />}
@@ -182,8 +198,25 @@ function PageViewInner(props: Props) {
           <div key={`a${i}`} className="mg-search-hit is-active" style={{ left: r.x * scale, top: r.y * scale, width: r.w * scale, height: r.h * scale }} />
         ))}
       </div>
+      {props.flashRects.length > 0 && (
+        <div className="mg-flash-layer">
+          {props.flashRects.map((r, i) => (
+            <div key={i} className="mg-flash" style={{ left: r.x * scale - 2, top: r.y * scale - 2, width: r.w * scale + 4, height: r.h * scale + 4 }} />
+          ))}
+        </div>
+      )}
       <AnnotationLayer {...props} pageIndex={index} />
-      {selected && !editing && tool === 'select' && <Popover a={selected} scale={scale} dispatch={props.dispatch} onComment={() => props.onOpenComment(selected.id)} onSelect={props.onSelect} />}
+      {props.cursors.map((c) => (
+        <div key={c.peer.id} className="mg-cursor" style={{ left: c.x * scale, top: c.y * scale, ['--peer' as string]: c.peer.color }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+            <path d="M1 1l5.5 13 1.8-5.2L13.5 7z" fill="var(--peer)" stroke="#fff" strokeWidth="1.2" strokeLinejoin="round" />
+          </svg>
+          <span>{c.peer.name}</span>
+        </div>
+      ))}
+      {selected && !editing && tool === 'select' && (
+        <Popover a={selected} scale={scale} dispatch={props.dispatch} onComment={() => props.onOpenComment(selected.id)} onAskAI={() => props.onAskAI(selected)} onSelect={props.onSelect} />
+      )}
       {editing && <TextEditor a={editing} scale={scale} dispatch={props.dispatch} onDone={() => props.onEditText(null)} />}
       <div className="mg-page-number">{index + 1}</div>
     </div>
@@ -192,7 +225,7 @@ function PageViewInner(props: Props) {
 
 export const PageView = memo(PageViewInner);
 
-function Popover({ a, scale, dispatch, onComment, onSelect }: { a: Annotation; scale: number; dispatch: Props['dispatch']; onComment: () => void; onSelect: Props['onSelect'] }) {
+function Popover({ a, scale, dispatch, onComment, onAskAI, onSelect }: { a: Annotation; scale: number; dispatch: Props['dispatch']; onComment: () => void; onAskAI: () => void; onSelect: Props['onSelect'] }) {
   const r = bbox(a);
   const top = r.y * scale - 48;
   return (
@@ -210,6 +243,11 @@ function Popover({ a, scale, dispatch, onComment, onSelect }: { a: Annotation; s
       <button className="mg-icon-btn" title="Comment" onClick={onComment}>
         <MessageSquare size={16} />
       </button>
+      {'text' in a && a.type !== 'text' && a.text && (
+        <button className="mg-icon-btn ai" title="Ask AI about this" onClick={onAskAI}>
+          <Sparkles size={16} />
+        </button>
+      )}
       <button
         className="mg-icon-btn danger"
         title="Delete (Del)"

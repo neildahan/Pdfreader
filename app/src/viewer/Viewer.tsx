@@ -17,10 +17,13 @@ import {
   PanelLeft,
   PenLine,
   Plus,
+  Radio,
   Redo2,
   RotateCcw,
   Search,
+  Share2,
   Signature,
+  Sparkles,
   Square,
   StickyNote,
   Strikethrough,
@@ -32,7 +35,13 @@ import {
 } from 'lucide-react';
 import { loadDocument, type LoadedDocument } from './pdfLoader';
 import { annReducer, loadSaved, save } from './store';
-import { bbox } from './geometry';
+import { bbox, mergeLineRects, uid } from './geometry';
+import { decodeShare, demoLink, encodeShare, randomId, type SharePayload } from './share';
+import { ShareDialog } from './ShareDialog';
+import { AssistantPanel } from './ai/AssistantPanel';
+import { loadAiSettings, type AiSettings } from './ai/ai';
+import { COLLAB_SERVER, useCollab, type Cursor } from './collab/useCollab';
+import { Avatar } from './CommentsPanel';
 import { PageView } from './PageView';
 import { Thumbnails } from './Thumbnails';
 import { CommentsPanel } from './CommentsPanel';
@@ -40,7 +49,7 @@ import { SignaturePad } from './SignaturePad';
 import { TextIndex, type SearchHit } from './search';
 import { download, exportPdf } from './exportPdf';
 import type { ToolStyle } from './AnnotationLayer';
-import { PALETTE, type Annotation, type Point, type Tool } from './types';
+import { PALETTE, type Annotation, type Point, type Rect, type Tool } from './types';
 import './viewer.css';
 
 const CSS_UNITS = 96 / 72;
@@ -92,6 +101,10 @@ export type ViewerProps = {
   compact?: boolean;
   /** Pre-filled reviewer name. */
   author?: string;
+  /** Token from a share link (#/demo/s/<token>): annotations to merge in once the matching PDF is open. */
+  share?: string;
+  /** Live session to join (#/demo/live/<room>). */
+  room?: string;
 };
 
 type Toast = { id: number; text: string };
@@ -104,11 +117,19 @@ function readAuthor(fallback: string) {
   }
 }
 
-export function Viewer({ src, compact = false, author: authorProp = 'You' }: ViewerProps) {
+function readCollabServer() {
+  try {
+    return localStorage.getItem('margin:collab-server') ?? COLLAB_SERVER;
+  } catch {
+    return COLLAB_SERVER;
+  }
+}
+
+export function Viewer({ src, compact = false, author: authorProp = 'You', share, room: roomProp }: ViewerProps) {
   const [doc, setDoc] = useState<LoadedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ann, dispatch] = useReducer(annReducer, { annotations: [], past: [], future: [] });
+  const [ann, dispatch] = useReducer(annReducer, { annotations: [], past: [], future: [], source: 'load' });
   const [tool, setToolState] = useState<Tool>('select');
   const [styles, setStyles] = useState(DEFAULT_STYLES);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -130,6 +151,15 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
   const [dragOver, setDragOver] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
+  const [rightTab, setRightTab] = useState<'comments' | 'assistant'>('comments');
+  const [aiSettings, setAiSettings] = useState<AiSettings>(loadAiSettings);
+  const [aiSeed, setAiSeed] = useState<{ text: string; n: number } | null>(null);
+  const [flash, setFlash] = useState<{ page: number; rects: Rect[] } | null>(null);
+  const [shareOpen, setShareOpen] = useState<'link' | 'live' | null>(null);
+  const [pendingShare, setPendingShare] = useState<SharePayload | null>(null);
+  const [docUrl, setDocUrl] = useState<string | null>(null);
+  const [room, setRoom] = useState<string | null>(roomProp ?? null);
+  const [collabServer, setCollabServerState] = useState(readCollabServer);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -154,11 +184,12 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
   };
 
   const open = useCallback(
-    async (data: ArrayBuffer, name: string) => {
+    async (data: ArrayBuffer | Uint8Array, name: string, url: string | null = null) => {
       setLoading(true);
       setError(null);
       try {
         const loaded = await loadDocument(data, name);
+        setDocUrl(url);
         indexRef.current = new TextIndex(loaded.pdf);
         const saved = loadSaved(loaded.fingerprint);
         dispatch({ type: 'set', annotations: saved ?? loaded.imported });
@@ -185,16 +216,84 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
 
   useEffect(() => {
     let cancelled = false;
-    fetch(src)
-      .then((r) => r.arrayBuffer())
-      .then((buf) => {
-        if (!cancelled) open(buf, src.split('/').pop() || 'document.pdf');
-      })
-      .catch(() => setError('Could not load the sample document.'));
+    (async () => {
+      let url = src;
+      if (share) {
+        try {
+          const payload = await decodeShare(share);
+          setPendingShare(payload);
+          // Only follow relative document URLs, so a link can't point the viewer at another site.
+          if (payload.doc.url && !/^[a-z]+:|^\/\//i.test(payload.doc.url)) url = payload.doc.url;
+        } catch {
+          toast('This share link is incomplete or damaged');
+        }
+      }
+      try {
+        const buf = await (await fetch(url)).arrayBuffer();
+        if (!cancelled) open(buf, url.split('/').pop() || 'document.pdf', url);
+      } catch {
+        setError('Could not load the document.');
+      }
+    })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, open]);
+
+  // Shared annotations land once the matching document is open.
+  useEffect(() => {
+    if (!doc || !pendingShare || doc.fingerprint !== pendingShare.doc.fingerprint) return;
+    const valid = pendingShare.annotations.filter((a) => a && a.id && a.page < doc.pages.length);
+    dispatch({ type: 'merge', annotations: valid });
+    setShowComments(true);
+    setRightTab('comments');
+    toast(`Added ${valid.length} annotation${valid.length === 1 ? '' : 's'} shared by ${pendingShare.from}`);
+    setPendingShare(null);
+  }, [doc, pendingShare, toast]);
+
+  const collab = useCollab({
+    room,
+    server: collabServer,
+    name: author,
+    doc: doc ? { fingerprint: doc.fingerprint, name: doc.name, bytes: doc.bytes } : null,
+    ann,
+    dispatch,
+    onDoc: useCallback((bytes: Uint8Array, name: string) => {
+      open(bytes, name);
+    }, [open]),
+  });
+
+  const setCollabServer = (url: string) => {
+    setCollabServerState(url);
+    try {
+      localStorage.setItem('margin:collab-server', url);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const liveLink = room ? demoLink(`live/${room}`) : null;
+  const startLive = () => {
+    const id = randomId();
+    setRoom(id);
+    if (!compact) history.replaceState(null, '', `#/demo/live/${id}`);
+  };
+  const stopLive = () => {
+    setRoom(null);
+    if (!compact) history.replaceState(null, '', '#/demo');
+  };
+
+  const createShareLink = useCallback(async () => {
+    if (!doc) throw new Error('No document');
+    const token = await encodeShare({
+      v: 1,
+      doc: { name: doc.name, fingerprint: doc.fingerprint, ...(docUrl ? { url: docUrl } : {}) },
+      from: author,
+      annotations: ann.annotations,
+    });
+    return demoLink(`s/${token}`);
+  }, [doc, docUrl, author, ann.annotations]);
 
   // Autosave per document.
   useEffect(() => {
@@ -308,7 +407,42 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
 
   const openComment = useCallback((id: string) => {
     setShowComments(true);
+    setRightTab('comments');
     setFocusCommentId(id);
+  }, []);
+
+  // AI assistant hooks
+  const getDocText = useCallback(async () => {
+    if (!doc || !indexRef.current) throw new Error('Open a document first.');
+    return { name: doc.name, pages: await indexRef.current.texts(doc.pages.length) };
+  }, [doc]);
+  const locate = useCallback(async (page: number, quote: string) => (indexRef.current ? indexRef.current.locate(page, quote) : []), []);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const jumpTo = useCallback(
+    (page: number, rects: Rect[]) => {
+      goToPage(page, Math.max(0, (rects[0]?.y ?? 0) * scale - 140));
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      setFlash({ page, rects });
+      flashTimer.current = setTimeout(() => setFlash(null), 2400);
+    },
+    [goToPage, scale],
+  );
+  const highlightFromAi = useCallback(
+    (page: number, rects: Rect[], quote: string, note: string) => {
+      const now = Date.now();
+      dispatch({
+        type: 'add',
+        annotation: { id: uid(), page, type: 'highlight', rects: mergeLineRects(rects), text: quote, color: '#FFD43B', opacity: 0.45, author, createdAt: now, updatedAt: now, comment: note, replies: [] },
+      });
+      jumpTo(page, rects);
+    },
+    [author, jumpTo],
+  );
+  const askAiAbout = useCallback((a: Annotation) => {
+    const text = 'text' in a && a.text ? a.text : '';
+    setShowComments(true);
+    setRightTab('assistant');
+    setAiSeed({ text: text ? `Explain this passage and anything I should watch out for: "${text.slice(0, 600)}"` : 'What is on this part of the page?', n: Date.now() });
   }, []);
 
   // Search
@@ -381,6 +515,11 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
     return m;
   }, [ann.annotations, doc]);
   const counts = useMemo(() => byPage.map((l) => l.length), [byPage]);
+  const cursorsByPage = useMemo(() => {
+    const m = new Map<number, Cursor[]>();
+    for (const c of collab.cursors.values()) m.set(c.page, [...(m.get(c.page) ?? []), c]);
+    return m;
+  }, [collab.cursors]);
   const hitsByPage = useMemo(() => {
     const m = new Map<number, SearchHit['rects']>();
     hits.forEach((h, i) => {
@@ -589,6 +728,20 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
             )}
             <input ref={jsonRef} type="file" accept="application/json,.json" hidden onChange={(e) => importJson(e.target.files?.[0])} />
           </div>
+          {room && collab.peers.length > 0 && (
+            <div className="mg-presence" title={collab.peers.map((p) => p.name).join(', ')}>
+              {collab.peers.slice(0, 3).map((p) => (
+                <span key={p.id} className="mg-presence-avatar" style={{ ['--peer' as string]: p.color }}>
+                  <Avatar name={p.name} />
+                </span>
+              ))}
+              {collab.peers.length > 3 && <span className="mg-presence-more">+{collab.peers.length - 3}</span>}
+            </div>
+          )}
+          <button className={`mg-btn sm ${room ? 'is-live' : ''}`} onClick={() => setShareOpen(room ? 'live' : 'link')} disabled={!doc} title="Share">
+            {room ? <Radio size={15} /> : <Share2 size={15} />}
+            <span className="hide-sm">{room ? 'Live' : 'Share'}</span>
+          </button>
           <button className={`mg-icon-btn ${showComments ? 'is-on' : ''}`} title="Comments" onClick={() => setShowComments((v) => !v)}>
             <MessageSquare size={18} />
             {ann.annotations.length > 0 && <span className="mg-dot">{ann.annotations.length}</span>}
@@ -713,6 +866,10 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
                   onCreated={onCreated}
                   onEditText={setEditingId}
                   onOpenComment={openComment}
+                  onAskAI={askAiAbout}
+                  flashRects={flash?.page === i ? flash.rects : EMPTY}
+                  cursors={cursorsByPage.get(i) ?? EMPTY}
+                  onCursor={room ? collab.sendCursor : undefined}
                 />
               ))}
             </div>
@@ -726,6 +883,17 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
 
         {showComments && (
           <aside className="mg-sidebar right">
+            <div className="mg-tabs" role="tablist">
+              <button role="tab" aria-selected={rightTab === 'comments'} className={rightTab === 'comments' ? 'is-active' : ''} onClick={() => setRightTab('comments')}>
+                <MessageSquare size={15} /> Comments <span className="mg-count">{ann.annotations.length}</span>
+              </button>
+              <button role="tab" aria-selected={rightTab === 'assistant'} className={rightTab === 'assistant' ? 'is-active' : ''} onClick={() => setRightTab('assistant')}>
+                <Sparkles size={15} /> Assistant
+              </button>
+            </div>
+            {rightTab === 'assistant' ? (
+              <AssistantPanel settings={aiSettings} onSettings={setAiSettings} getDocText={getDocText} locate={locate} onJump={jumpTo} onHighlight={highlightFromAi} seed={aiSeed} />
+            ) : (
             <CommentsPanel
               annotations={ann.annotations}
               selectedId={selectedId}
@@ -736,10 +904,41 @@ export function Viewer({ src, compact = false, author: authorProp = 'You' }: Vie
               onSelect={selectFromPanel}
               onClose={() => setShowComments(false)}
             />
+            )}
           </aside>
         )}
       </div>
 
+      {pendingShare && doc && doc.fingerprint !== pendingShare.doc.fingerprint && (
+        <div className="mg-banner">
+          <Share2 size={16} />
+          <span>
+            {pendingShare.from} shared {pendingShare.annotations.length} annotation{pendingShare.annotations.length === 1 ? '' : 's'} on <strong>{pendingShare.doc.name}</strong>. Open your copy of that file to see them.
+          </span>
+          <button className="mg-btn primary sm" onClick={() => fileRef.current?.click()}>
+            Open file
+          </button>
+          <button className="mg-icon-btn sm" onClick={() => setPendingShare(null)} aria-label="Dismiss">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+      {collab.receiving && <div className="mg-banner info">Receiving {collab.receiving.name} from the session… {collab.receiving.pct}%</div>}
+      {shareOpen && doc && (
+        <ShareDialog
+          docName={doc.name}
+          docIsPublic={!!docUrl}
+          annotationCount={ann.annotations.length}
+          createLink={createShareLink}
+          live={{ room, status: collab.status, peers: collab.peers, kind: collab.kind, link: liveLink, receiving: collab.receiving }}
+          server={collabServer}
+          onServer={setCollabServer}
+          onStartLive={startLive}
+          onStopLive={stopLive}
+          initialTab={shareOpen}
+          onClose={() => setShareOpen(null)}
+        />
+      )}
       {dragOver && (
         <div className="mg-drop">
           <Upload size={32} />
