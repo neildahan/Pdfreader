@@ -3,6 +3,7 @@ import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { TextLayer } from './pdfjs';
 import { MessageSquare, Sparkles, Trash2 } from 'lucide-react';
 import type { Cursor } from './collab/useCollab';
+import { VisibilityPill } from './CommentsPanel';
 import { AnnotationLayer, type ToolStyle } from './AnnotationLayer';
 import { bbox, mergeLineRects, uid } from './geometry';
 import type { AnnAction } from './store';
@@ -229,7 +230,7 @@ function PageViewInner(props: Props) {
         </div>
       ))}
       {selected && !editing && tool === 'select' && (
-        <Popover a={selected} scale={scale} dispatch={props.dispatch} onComment={() => props.onOpenComment(selected.id)} onAskAI={() => props.onAskAI(selected)} onSelect={props.onSelect} />
+        <Popover a={selected} scale={scale} author={props.author} dispatch={props.dispatch} onComment={() => props.onOpenComment(selected.id)} onAskAI={() => props.onAskAI(selected)} onSelect={props.onSelect} />
       )}
       {editing && <TextEditor a={editing} scale={scale} dispatch={props.dispatch} onDone={() => props.onEditText(null)} />}
       <div className="mg-page-number">{index + 1}</div>
@@ -239,7 +240,7 @@ function PageViewInner(props: Props) {
 
 export const PageView = memo(PageViewInner);
 
-function Popover({ a, scale, dispatch, onComment, onAskAI, onSelect }: { a: Annotation; scale: number; dispatch: Props['dispatch']; onComment: () => void; onAskAI: () => void; onSelect: Props['onSelect'] }) {
+function Popover({ a, scale, author, dispatch, onComment, onAskAI, onSelect }: { a: Annotation; scale: number; author: string; dispatch: Props['dispatch']; onComment: () => void; onAskAI: () => void; onSelect: Props['onSelect'] }) {
   const r = bbox(a);
   const top = r.y * scale - 48;
   return (
@@ -254,6 +255,7 @@ function Popover({ a, scale, dispatch, onComment, onAskAI, onSelect }: { a: Anno
         />
       ))}
       <span className="mg-popover-sep" />
+      <VisibilityPill a={a} author={author} dispatch={dispatch} />
       <button className="mg-icon-btn" title="Comment" onClick={onComment}>
         <MessageSquare size={16} />
       </button>

@@ -21,7 +21,8 @@ export type AnnAction =
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'remote'; ops: RemoteOp[] }
-  | { type: 'merge'; annotations: Annotation[] };
+  | { type: 'merge'; annotations: Annotation[] }
+  | { type: 'visibility'; ids: string[]; visibility: 'private' | 'shared' };
 
 const LIMIT = 100;
 
@@ -44,6 +45,8 @@ function applyOps(list: Annotation[], ops: RemoteOp[]): Annotation[] {
   return out;
 }
 
+const asShared = (a: Annotation): Annotation => (a.visibility === 'shared' ? a : ({ ...a, visibility: 'shared' } as Annotation));
+
 /** Union by id; the most recently updated copy wins. */
 export function mergeAnnotations(base: Annotation[], incoming: Annotation[]): Annotation[] {
   return applyOps(base, incoming.map((annotation) => ({ kind: 'upsert', annotation })));
@@ -62,7 +65,8 @@ function restamp(target: Annotation[], current: Annotation[]): Annotation[] {
 export function annReducer(state: AnnState, action: AnnAction): AnnState {
   switch (action.type) {
     case 'add':
-      return commit(state, [...state.annotations, action.annotation]);
+      // New annotations are private notes until the author shares them.
+      return commit(state, [...state.annotations, { ...action.annotation, visibility: action.annotation.visibility ?? 'private' } as Annotation]);
     case 'update':
       return commit(
         state,
@@ -81,16 +85,24 @@ export function annReducer(state: AnnState, action: AnnAction): AnnState {
       return commit(state, state.annotations.filter((a) => a.id !== action.id));
     case 'set':
       return action.history ? commit(state, action.annotations) : { annotations: action.annotations, past: [], future: [], source: 'load' };
+    case 'visibility': {
+      const ids = new Set(action.ids);
+      const now = Date.now();
+      return commit(state, state.annotations.map((a) => (ids.has(a.id) && a.visibility !== action.visibility ? ({ ...a, visibility: action.visibility, updatedAt: now } as Annotation) : a)));
+    }
     case 'merge':
-      return commit(state, mergeAnnotations(state.annotations, action.annotations));
-    case 'remote':
+      // Annotations someone shared with us are, by definition, shared.
+      return commit(state, mergeAnnotations(state.annotations, action.annotations.map(asShared)));
+    case 'remote': {
+      const ops = action.ops.map((op) => (op.kind === 'upsert' ? { ...op, annotation: asShared(op.annotation) } : op));
       // Patch every history snapshot too, so undo only reverts this user's own edits.
       return {
-        annotations: applyOps(state.annotations, action.ops),
-        past: state.past.map((snap) => applyOps(snap, action.ops)),
-        future: state.future.map((snap) => applyOps(snap, action.ops)),
+        annotations: applyOps(state.annotations, ops),
+        past: state.past.map((snap) => applyOps(snap, ops)),
+        future: state.future.map((snap) => applyOps(snap, ops)),
         source: 'remote',
       };
+    }
     case 'checkpoint':
       // Records the current state so a series of un-tracked edits (a drag) undoes as one step.
       return { ...state, past: [...state.past, state.annotations].slice(-LIMIT), future: [], source: 'local' };

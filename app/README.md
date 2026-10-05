@@ -16,8 +16,11 @@ A working demo of an embeddable PDF viewer with annotations, plus the marketing 
 - Autosaves per document in the browser. Drag and drop any PDF. Nothing is uploaded.
 - Light/dark mode, responsive down to phone width.
 
+### Private notes and selective sharing
+Every annotation is **Private** (only you see it) or **Shared**. New annotations start private; toggle with the badge on the comment card or in the popover on the page. The checklist button in Comments selects several annotations at once to mark them shared/private or send just those in a share link. Live sessions only ever send Shared annotations: making one private removes it from everyone else's view, and someone else's shared annotation can't be made private by you. Anything received from others arrives as Shared.
+
 ### Share links
-**Share > Share link** puts all annotations and comment threads into one link, compressed into the URL fragment, so nothing is uploaded. Whoever opens it gets the annotations merged into their copy (newest edit wins) and can share back. For the sample PDF the link opens the document too; for a user's own file, the recipient opens their copy and the annotations appear on it.
+**Share > Share link** lets you choose what goes in: the selected annotations, everything marked Shared, or everything including private notes. The annotations and their comment threads go into one link, compressed into the URL fragment, so nothing is uploaded. Whoever opens it gets the annotations merged into their copy (newest edit wins) and can share back. For the sample PDF the link opens the document too; for a user's own file, the recipient opens their copy and the annotations appear on it.
 
 ### AI assistant (bring your own key)
 The **Assistant** tab answers questions about the open document, summarizes, and finds passages ("Find & highlight"). Answers carry citations to the exact sentence (Anthropic citations on the document text); clicking one jumps to it, and the highlighter icon turns it into an annotation. Quotes from "Find" that can't be located in the page text are flagged and not highlighted.

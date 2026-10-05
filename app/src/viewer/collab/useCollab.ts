@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Annotation } from '../types';
+import { isShared, type Annotation } from '../types';
 import type { AnnAction, AnnState, RemoteOp } from '../store';
 import { roomUrl, ServerTransport, TabsTransport, type CollabMsg, type Peer, type Status, type Transport } from './transport';
 import { randomId } from '../share';
@@ -83,7 +83,7 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
         if (room.hasDoc && !incoming.current) send({ t: 'doc-req', id: me.current.id, fp: room.fp });
         return;
       }
-      send({ t: 'sync', id: me.current.id, fp: mine!, annotations: latest.current.ann.annotations, ...(switching ? { switch: true } : {}) });
+      send({ t: 'sync', id: me.current.id, fp: mine!, annotations: latest.current.ann.annotations.filter(isShared), ...(switching ? { switch: true } : {}) });
       // Give the server a copy so people joining later get the file even if we've left.
       if (transport.current?.kind === 'server' && !(room.fp === mine && room.hasDoc)) {
         sendDoc();
@@ -111,7 +111,7 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
           setPeers((ps) => [...ps.filter((p) => p.id !== m.peer.id), m.peer]);
           if (m.t === 'hello') {
             send({ t: 'here', peer: me.current, fp: mine, name: d?.name, to: m.peer.id });
-            if (d && m.fp === mine) send({ t: 'sync', id: me.current.id, fp: d.fingerprint, annotations: latest.current.ann.annotations });
+            if (d && m.fp === mine) send({ t: 'sync', id: me.current.id, fp: d.fingerprint, annotations: latest.current.ann.annotations.filter(isShared) });
           }
           // Newcomers adopt the document of people already here; a deliberate switch moves everyone.
           const follow = m.t === 'here' || (m.t === 'hello' && m.switch);
@@ -200,11 +200,17 @@ export function useCollab({ room, server, name, doc, ann, dispatch, onDoc }: Opt
     const prev = lastSent.current;
     lastSent.current = ann.annotations;
     if (!room || !doc || !prev || ann.source !== 'local') return;
+    // Only shared annotations leave this browser. Making one private withdraws it from everyone.
     const before = new Map(prev.map((a) => [a.id, a]));
-    const now = new Set(ann.annotations.map((a) => a.id));
+    const now = new Map(ann.annotations.map((a) => [a.id, a]));
     const ops: RemoteOp[] = [];
-    for (const a of ann.annotations) if (before.get(a.id) !== a) ops.push({ kind: 'upsert', annotation: a });
-    for (const a of prev) if (!now.has(a.id)) ops.push({ kind: 'remove', id: a.id });
+    for (const a of ann.annotations) {
+      const old = before.get(a.id);
+      if (old === a) continue;
+      if (isShared(a)) ops.push({ kind: 'upsert', annotation: a });
+      else if (old && isShared(old)) ops.push({ kind: 'remove', id: a.id });
+    }
+    for (const a of prev) if (!now.has(a.id) && isShared(a)) ops.push({ kind: 'remove', id: a.id });
     if (ops.length) send({ t: 'ops', id: me.current.id, fp: doc.fingerprint, ops });
   }, [ann, room, doc, send]);
 

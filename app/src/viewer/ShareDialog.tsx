@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, Link2, Loader2, Radio, Users, X } from 'lucide-react';
+import { Check, Copy, Link2, ListChecks, Loader2, Lock, Radio, Users, X } from 'lucide-react';
 import { LONG_LINK } from './share';
 import type { Peer, Status } from './collab/transport';
 import { Avatar } from './CommentsPanel';
+
+/** What a share link contains. */
+export type ShareScope = 'selected' | 'shared' | 'all';
 
 type Props = {
   docName: string;
   /** True when recipients can open the PDF from the link itself (e.g. the sample). */
   docIsPublic: boolean;
-  annotationCount: number;
-  createLink: () => Promise<string>;
+  counts: Record<ShareScope, number>;
+  scope: ShareScope;
+  onScope: (s: ShareScope) => void;
+  createLink: (scope: ShareScope) => Promise<string>;
   live: { room: string | null; status: Status; peers: Peer[]; kind: 'tabs' | 'server'; link: string | null; receiving: { name: string; pct: number } | null };
   server: string;
   onServer: (url: string) => void;
@@ -46,20 +51,28 @@ export function ShareDialog(p: Props) {
   const [link, setLink] = useState<string | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
 
+  const count = p.counts[p.scope];
   useEffect(() => {
-    if (tab !== 'link') return;
+    if (tab !== 'link' || !count) return;
     let cancelled = false;
     setLink(null);
-    p.createLink().then(
+    setLinkError(null);
+    p.createLink(p.scope).then(
       (l) => !cancelled && setLink(l),
       () => !cancelled && setLinkError('Could not create the link in this browser.'),
     );
     return () => {
       cancelled = true;
     };
-    // Regenerate when the annotations change while the dialog is open.
+    // Regenerate when the scope or the number of annotations in it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, p.annotationCount]);
+  }, [tab, p.scope, count]);
+
+  const scopes: { id: ShareScope; icon: typeof Users; label: string; hint: string }[] = [
+    { id: 'selected', icon: ListChecks, label: `Selected annotations (${p.counts.selected})`, hint: p.counts.selected ? 'Only the ones you checked. They become Shared.' : 'Use the checklist button in Comments to pick some.' },
+    { id: 'shared', icon: Users, label: `Shared annotations (${p.counts.shared})`, hint: 'Everything marked Shared. Private notes stay out.' },
+    { id: 'all', icon: Lock, label: `Everything (${p.counts.all})`, hint: 'Includes your private notes.' },
+  ];
 
   return (
     <div className="mg-modal-backdrop" onPointerDown={p.onClose}>
@@ -81,11 +94,34 @@ export function ShareDialog(p: Props) {
 
         {tab === 'link' && (
           <div className="mg-share-body">
-            <p>
-              Anyone with this link sees your {p.annotationCount} annotation{p.annotationCount === 1 ? '' : 's'} and comment threads, and can add their own and share back.
-              The annotations travel inside the link, so nothing is uploaded anywhere.
-            </p>
-            {link ? <CopyField value={link} /> : linkError ? <p className="mg-ai-error">{linkError}</p> : <p className="mg-ai-thinking"><Loader2 size={14} className="spin" /> Creating link…</p>}
+            <div className="mg-scopes" role="radiogroup" aria-label="What to share">
+              {scopes.map((s) => (
+                <label key={s.id} className={`mg-scope ${p.scope === s.id ? 'is-on' : ''} ${p.counts[s.id] ? '' : 'is-empty'}`}>
+                  <input type="radio" name="mg-scope" checked={p.scope === s.id} onChange={() => p.onScope(s.id)} />
+                  <s.icon size={15} />
+                  <span>
+                    <strong>{s.label}</strong>
+                    <small>{s.hint}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {count === 0 ? (
+              <p className="mg-share-note">
+                {p.scope === 'selected'
+                  ? 'Nothing selected yet. Close this, tap the checklist button in Comments, and pick the annotations to send.'
+                  : 'No annotations are marked Shared yet. Click the Private badge on an annotation to share it, or pick “Selected”.'}
+              </p>
+            ) : link ? (
+              <CopyField value={link} />
+            ) : linkError ? (
+              <p className="mg-ai-error">{linkError}</p>
+            ) : (
+              <p className="mg-ai-thinking">
+                <Loader2 size={14} className="spin" /> Creating link…
+              </p>
+            )}
+            <p className="mg-ai-muted">The annotations and their comment threads travel inside the link, so nothing is uploaded. Recipients can add their own and share back.</p>
             {!p.docIsPublic && (
               <p className="mg-share-note">
                 The PDF itself isn't in the link. Recipients open the link, then open their copy of <strong>{p.docName}</strong>, and your annotations appear on it.
@@ -100,7 +136,7 @@ export function ShareDialog(p: Props) {
           <div className="mg-share-body">
             {!p.live.room ? (
               <>
-                <p>Review together in real time. Everyone sees each other's cursors, new annotations and comments as they happen. People who join get the document automatically.</p>
+                <p>Review together in real time. Everyone sees each other's cursors, and annotations marked Shared appear for everyone as they happen. Your private notes stay on this device. People who join get the document automatically.</p>
                 <label className="mg-ai-field">
                   Collaboration server <span className="mg-ai-muted">optional</span>
                   <input className="mg-input" placeholder="wss://collab.your-app.com" value={p.server} onChange={(e) => p.onServer(e.target.value)} />
@@ -118,6 +154,9 @@ export function ShareDialog(p: Props) {
                   <span className="mg-ai-muted">· {p.live.kind === 'server' ? 'via server' : 'tabs in this browser'}</span>
                 </div>
                 {p.live.link && <CopyField value={p.live.link} />}
+                <p className="mg-share-note">
+                  Others see your {p.counts.shared} Shared annotation{p.counts.shared === 1 ? '' : 's'}. {p.counts.all - p.counts.shared === 1 ? '1 private note stays' : `${p.counts.all - p.counts.shared} private notes stay`} on this device.
+                </p>
                 {p.live.receiving && (
                   <p className="mg-ai-thinking">
                     <Loader2 size={14} className="spin" /> Receiving {p.live.receiving.name}… {p.live.receiving.pct}%

@@ -31,7 +31,14 @@ type Base = {
   comment: string;
   replies: Reply[];
   resolved?: boolean;
+  /**
+   * Private annotations never leave this browser (not in live sessions, not in
+   * share links unless explicitly chosen). Missing means private.
+   */
+  visibility?: 'private' | 'shared';
 };
+
+export const isShared = (a: { visibility?: 'private' | 'shared' }) => a.visibility === 'shared';
 
 export type MarkupAnnotation = Base & {
   type: 'highlight' | 'underline' | 'strikeout';

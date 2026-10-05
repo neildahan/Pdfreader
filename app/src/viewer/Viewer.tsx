@@ -49,7 +49,8 @@ import { SignaturePad } from './SignaturePad';
 import { TextIndex, type SearchHit } from './search';
 import { download, exportPdf } from './exportPdf';
 import type { ToolStyle } from './AnnotationLayer';
-import { PALETTE, type Annotation, type Point, type Rect, type Tool } from './types';
+import { isShared, PALETTE, type Annotation, type Point, type Rect, type Tool } from './types';
+import type { ShareScope } from './ShareDialog';
 import './viewer.css';
 
 const CSS_UNITS = 96 / 72;
@@ -165,6 +166,9 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
   const [aiSeed, setAiSeed] = useState<{ text: string; n: number } | null>(null);
   const [flash, setFlash] = useState<{ page: number; rects: Rect[] } | null>(null);
   const [shareOpen, setShareOpen] = useState<'link' | 'live' | null>(null);
+  const [shareScope, setShareScope] = useState<ShareScope>('shared');
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
   const [pendingShare, setPendingShare] = useState<SharePayload | null>(null);
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [room, setRoom] = useState<string | null>(roomProp ?? null);
@@ -304,16 +308,33 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
     if (!compact) history.replaceState(null, '', '#/demo');
   };
 
-  const createShareLink = useCallback(async () => {
-    if (!doc) throw new Error('No document');
-    const token = await encodeShare({
-      v: 1,
-      doc: { name: doc.name, fingerprint: doc.fingerprint, ...(docUrl ? { url: docUrl } : {}) },
-      from: author,
-      annotations: ann.annotations,
-    });
-    return demoLink(`s/${token}`);
-  }, [doc, docUrl, author, ann.annotations]);
+  const scopeList = useCallback(
+    (scope: ShareScope) => (scope === 'selected' ? ann.annotations.filter((a) => checked.has(a.id)) : scope === 'shared' ? ann.annotations.filter(isShared) : ann.annotations),
+    [ann.annotations, checked],
+  );
+  const createShareLink = useCallback(
+    async (scope: ShareScope) => {
+      if (!doc) throw new Error('No document');
+      const list = scopeList(scope);
+      // Sending specific annotations to someone makes them shared ones.
+      if (scope === 'selected') {
+        const ids = list.filter((a) => !isShared(a)).map((a) => a.id);
+        if (ids.length) dispatch({ type: 'visibility', ids, visibility: 'shared' });
+      }
+      const token = await encodeShare({
+        v: 1,
+        doc: { name: doc.name, fingerprint: doc.fingerprint, ...(docUrl ? { url: docUrl } : {}) },
+        from: author,
+        annotations: list.map((a) => ({ ...a, visibility: 'shared' }) as Annotation),
+      });
+      return demoLink(`s/${token}`);
+    },
+    [doc, docUrl, author, scopeList],
+  );
+  const openShare = (tab: 'link' | 'live', scope?: ShareScope) => {
+    setShareScope(scope ?? (checked.size ? 'selected' : 'shared'));
+    setShareOpen(tab);
+  };
 
   // Autosave per document.
   useEffect(() => {
@@ -792,7 +813,7 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
               {collab.peers.length > 3 && <span className="mg-presence-more">+{collab.peers.length - 3}</span>}
             </div>
           )}
-          <button className={`mg-btn sm ${room ? 'is-live' : ''}`} onClick={() => setShareOpen(room ? 'live' : 'link')} disabled={!doc} title="Share">
+          <button className={`mg-btn sm ${room ? 'is-live' : ''}`} onClick={() => openShare(room ? 'live' : 'link')} disabled={!doc} title="Share">
             {room ? <Radio size={15} /> : <Share2 size={15} />}
             <span className="hide-sm">{room ? 'Live' : 'Share'}</span>
           </button>
@@ -959,6 +980,12 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
               onAuthor={setAuthor}
               dispatch={dispatch}
               onSelect={selectFromPanel}
+              checked={checked}
+              onChecked={setChecked}
+              selectMode={selectMode}
+              onSelectMode={setSelectMode}
+              onShareChecked={() => openShare('link', 'selected')}
+              live={!!room}
             />
             )}
           </aside>
@@ -1007,7 +1034,9 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
         <ShareDialog
           docName={doc.name}
           docIsPublic={!!docUrl}
-          annotationCount={ann.annotations.length}
+          counts={{ selected: checked.size, shared: ann.annotations.filter(isShared).length, all: ann.annotations.length }}
+          scope={shareScope}
+          onScope={setShareScope}
           createLink={createShareLink}
           live={{ room, status: collab.status, peers: collab.peers, kind: collab.kind, link: liveLink, receiving: collab.receiving }}
           server={collabServer}

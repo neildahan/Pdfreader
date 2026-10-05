@@ -76,7 +76,7 @@ const FEATURES = [
   { icon: ScanSearch, title: 'Search & selection', text: 'Full-text search with hit navigation and native text selection across pages.' },
   { icon: Lock, title: 'Documents stay with you', text: 'Everything runs in the browser. Files never touch our servers, which keeps your security review short.' },
   { icon: Sparkles, title: 'AI that cites the page', text: 'Ask questions, get summaries and find clauses. Every answer links to the exact passage, and one click turns it into a highlight. Uses your own Anthropic key.' },
-  { icon: Share2, title: 'Share with a link', text: 'Send annotations and comment threads in a single link. The annotations travel inside the link itself, so nothing is uploaded.' },
+  { icon: Share2, title: 'Private notes, selective sharing', text: 'Annotations start as private notes. Share only the ones you choose, by link or live, and your private notes never leave your device.' },
   { icon: Users, title: 'Review together, live', text: 'Live cursors, instant annotations and replies, and the file sent to everyone who joins. Runs on a small server you host yourself.' },
 ];
 
