@@ -14,6 +14,7 @@ import http from 'node:http';
 const PORT = Number(process.env.PORT || 8788);
 const KEY = process.env.ANTHROPIC_API_KEY;
 const ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+const UPSTREAM = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/+$/, '');
 const MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5']);
 
 if (!KEY) {
@@ -45,7 +46,7 @@ http
     }
     if (!MODELS.has(body.model)) return res.writeHead(400, cors).end('model not allowed');
 
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    const upstream = await fetch(`${UPSTREAM}/v1/messages`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

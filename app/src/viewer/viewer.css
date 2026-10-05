@@ -1765,3 +1765,7 @@
 .mg-icon-btn.ai {
   color: var(--mg-accent);
 }
+.mg-unverified {
+  font-size: 12px;
+  color: #c2410c;
+}

@@ -5,7 +5,10 @@ import type { Rect } from '../types';
 
 type Msg =
   | { id: number; role: 'user'; text: string; mode: 'ask' | 'find' }
-  | { id: number; role: 'assistant'; text: string; parts?: AnswerPart[]; findings?: Finding[]; error?: string; pending?: boolean; note?: string };
+  | { id: number; role: 'assistant'; text: string; parts?: AnswerPart[]; findings?: Checked[]; error?: string; pending?: boolean; note?: string };
+
+/** A finding plus where its quote was found on the page (empty when the quote isn't in the text). */
+type Checked = Finding & { rects: Rect[] };
 
 type Props = {
   settings: AiSettings;
@@ -118,15 +121,13 @@ function Answer({ parts, props }: { parts: AnswerPart[]; props: Props }) {
 
 const dedupe = (cs: Citation[]) => cs.filter((c, i) => cs.findIndex((d) => d.page === c.page && d.quote === c.quote) === i);
 
-function Findings({ findings, props }: { findings: Finding[]; props: Props }) {
+function Findings({ findings, props }: { findings: Checked[]; props: Props }) {
   const [done, setDone] = useState<Set<number>>(new Set());
-  const highlight = async (i: number) => {
+  const highlight = (i: number) => {
     const f = findings[i];
-    const rects = await props.locate(f.page, f.quote);
-    if (!rects.length) return false;
-    props.onHighlight(f.page, rects, f.quote, `${f.label}: ${f.note}`);
+    if (!f.rects.length) return;
+    props.onHighlight(f.page, f.rects, f.quote, `${f.label}: ${f.note}`);
     setDone((d) => new Set(d).add(i));
-    return true;
   };
   if (!findings.length) return <p>Nothing matching was found in this document.</p>;
   return (
@@ -135,7 +136,7 @@ function Findings({ findings, props }: { findings: Finding[]; props: Props }) {
         <span>
           {findings.length} passage{findings.length > 1 ? 's' : ''}
         </span>
-        <button className="mg-link-btn" onClick={async () => { for (let i = 0; i < findings.length; i++) if (!done.has(i)) await highlight(i); }}>
+        <button className="mg-link-btn" onClick={() => findings.forEach((_, i) => !done.has(i) && highlight(i))}>
           <Highlighter size={13} /> Highlight all
         </button>
       </div>
@@ -148,12 +149,16 @@ function Findings({ findings, props }: { findings: Finding[]; props: Props }) {
           <blockquote className="mg-quote">{f.quote}</blockquote>
           <p className="mg-finding-note">{f.note}</p>
           <div className="mg-finding-actions">
-            <button className="mg-link-btn" onClick={async () => props.onJump(f.page, await props.locate(f.page, f.quote))}>
-              <LocateFixed size={13} /> Show
+            <button className="mg-link-btn" onClick={() => props.onJump(f.page, f.rects)}>
+              <LocateFixed size={13} /> {f.rects.length ? 'Show' : `Go to page ${f.page + 1}`}
             </button>
-            <button className="mg-link-btn" disabled={done.has(i)} onClick={() => highlight(i)}>
-              <Highlighter size={13} /> {done.has(i) ? 'Highlighted' : 'Highlight'}
-            </button>
+            {f.rects.length ? (
+              <button className="mg-link-btn" disabled={done.has(i)} onClick={() => highlight(i)}>
+                <Highlighter size={13} /> {done.has(i) ? 'Highlighted' : 'Highlight'}
+              </button>
+            ) : (
+              <span className="mg-unverified">Exact quote not found on the page. Check it yourself.</span>
+            )}
           </div>
         </div>
       ))}
@@ -291,7 +296,9 @@ export const AssistantPanel = memo(function AssistantPanel(props: Props) {
       const truncNote = (n: number | null) => (n === null ? undefined : `The document is long; only pages 1–${n} were sent.`);
       if (m === 'find') {
         const { findings, truncatedAt } = await findPassages({ settings, doc, request: q, signal: ctrl.signal });
-        patch({ pending: false, text: `Found ${findings.length}`, findings, note: truncNote(truncatedAt) });
+        // Verify every quote against the real page text before offering to highlight it.
+        const checked = await Promise.all(findings.map(async (f) => ({ ...f, rects: f.page < doc.pages.length ? await props.locate(f.page, f.quote) : [] })));
+        patch({ pending: false, text: `Found ${checked.length}`, findings: checked, note: truncNote(truncatedAt) });
       } else {
         const res = await askDocument({ settings, doc, history, question: q, onText: (t) => patch({ text: t }), signal: ctrl.signal });
         patch({ pending: false, text: res.parts.map((p) => p.text).join(''), parts: res.parts, note: truncNote(res.truncatedAt) });
