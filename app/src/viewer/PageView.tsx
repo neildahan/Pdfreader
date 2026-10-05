@@ -123,9 +123,11 @@ function PageViewInner(props: Props) {
   }, [visible, scale, pdf, index]);
 
   // Text markup: turn a finished text selection on this page into an annotation.
+  // Mouse and pen apply on release; touch users adjust the selection handles first
+  // and confirm with the floating button, which fires 'margin:apply-selection'.
   useEffect(() => {
     if (!['highlight', 'underline', 'strikeout'].includes(tool)) return;
-    const onUp = () => {
+    const apply = () => {
       const sel = window.getSelection();
       const wrap = wrapRef.current;
       if (!sel || sel.isCollapsed || !wrap) return;
@@ -142,7 +144,12 @@ function PageViewInner(props: Props) {
         if (r.width > box.width * 0.95 && r.height > box.height * 0.5) continue; // whole-layer rects
         rects.push({ x: (x1 - box.left) / scale, y: (y1 - box.top) / scale, w: (x2 - x1) / scale, h: (y2 - y1) / scale });
       }
-      const merged = mergeLineRects(rects);
+      // Some browsers (notably iOS Safari) report block-sized boxes for a selection;
+      // keep only rectangles about as tall as a line of text.
+      const heights = rects.map((r) => r.h).sort((a, b) => a - b);
+      const median = heights[Math.floor(heights.length / 2)] ?? 0;
+      const lines = rects.filter((r) => r.h <= Math.max(median * 2.2, 6) && r.h < 60);
+      const merged = mergeLineRects(lines);
       if (!merged.length) return;
       props.onCreated({
         id: uid(),
@@ -161,8 +168,15 @@ function PageViewInner(props: Props) {
       // Let other pages read a selection that spans them before clearing it.
       setTimeout(() => sel.removeAllRanges(), 0);
     };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') apply();
+    };
     document.addEventListener('pointerup', onUp);
-    return () => document.removeEventListener('pointerup', onUp);
+    window.addEventListener('margin:apply-selection', apply);
+    return () => {
+      document.removeEventListener('pointerup', onUp);
+      window.removeEventListener('margin:apply-selection', apply);
+    };
   });
 
   const selected = props.annotations.find((a) => a.id === props.selectedId);

@@ -1773,3 +1773,58 @@
   margin-left: auto;
   align-self: center;
 }
+
+/* Touch: confirm a text selection */
+.mg-selection-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border);
+  box-shadow: var(--mg-shadow-lg);
+  animation: mg-pop-centered 0.16s ease-out;
+}
+
+@media (max-width: 720px) {
+  /* Colors and search each get their own row instead of squeezing together. */
+  .mg-subbar {
+    flex-wrap: wrap;
+    padding: 6px 12px;
+    gap: 6px;
+  }
+  .mg-props {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mg-search {
+    width: 100%;
+    margin-left: 0;
+  }
+  /* iOS zooms into inputs with text smaller than 16px. */
+  .mg-viewer input,
+  .mg-viewer textarea:not(.mg-text-editor),
+  .mg-viewer select {
+    font-size: 16px !important;
+  }
+  .mg-menu {
+    width: min(290px, calc(100vw - 16px));
+  }
+}
+.mg-input.bare:focus,
+.mg-input.bare:focus-visible {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+@media (max-width: 720px) {
+  .mg-props {
+    padding: 4px;
+  }
+}

@@ -149,7 +149,14 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [hitIndex, setHitIndex] = useState(0);
-  const [exportOpen, setExportOpen] = useState(false);
+  /** Open export menu position (fixed, so a sideways-scrolling toolbar can't clip it). */
+  const [exportMenu, setExportMenu] = useState<{ top: number; right: number } | null>(null);
+  const exportOpen = exportMenu !== null;
+  const setExportOpen = (open: boolean) => {
+    if (!open) setExportMenu(null);
+  };
+  /** A text selection waiting for touch users to confirm (markup tools). */
+  const [touchSelection, setTouchSelection] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
@@ -593,6 +600,31 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
     toast('Annotations reset — undo to bring them back');
   };
 
+  // Touch: show a confirm button while a text selection exists and a markup tool is active.
+  const markupTool = tool === 'highlight' || tool === 'underline' || tool === 'strikeout';
+  useEffect(() => {
+    if (!markupTool) {
+      setTouchSelection(false);
+      return;
+    }
+    let touch = false;
+    const onDown = (e: PointerEvent) => {
+      touch = e.pointerType === 'touch';
+    };
+    const onChange = () => {
+      const sel = window.getSelection();
+      const node = sel && !sel.isCollapsed ? sel.anchorNode : null;
+      const inPage = !!node && !!(node.nodeType === 1 ? (node as Element) : node.parentElement)?.closest('.mg-page');
+      setTouchSelection(touch && inPage && !!sel?.toString().trim());
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('selectionchange', onChange);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('selectionchange', onChange);
+    };
+  }, [markupTool]);
+
   const style = styles[tool];
   const setStyle = (patch: Partial<ToolStyle>) => {
     setStyles((s) => ({ ...s, [tool]: { ...s[tool], ...patch } }));
@@ -683,7 +715,16 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
             </button>
           </div>
           <div className="mg-menu-wrap">
-            <button className="mg-btn primary sm" onClick={() => setExportOpen((v) => !v)} disabled={!doc || busy}>
+            <button
+              className="mg-btn primary sm"
+              onClick={(e) => {
+                if (exportMenu) return setExportMenu(null);
+                const r = e.currentTarget.getBoundingClientRect();
+                const width = Math.min(290, window.innerWidth - 16);
+                setExportMenu({ top: r.bottom + 6, right: Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - width - 8)) });
+              }}
+              disabled={!doc || busy}
+            >
               {busy ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
               <span className="hide-sm">Export</span>
               <ChevronDown size={14} />
@@ -691,7 +732,7 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
             {exportOpen && (
               <>
                 <div className="mg-menu-backdrop" onClick={() => setExportOpen(false)} />
-                <div className="mg-menu">
+                <div className="mg-menu" style={{ position: 'fixed', top: exportMenu!.top, right: exportMenu!.right }}>
                   <button onClick={() => doExport('annotations')}>
                     <Download size={16} />
                     <div>
@@ -935,6 +976,29 @@ export function Viewer({ src, compact = false, author: authorProp = 'You', share
           </button>
           <button className="mg-icon-btn sm" onClick={() => setPendingShare(null)} aria-label="Dismiss">
             <X size={15} />
+          </button>
+        </div>
+      )}
+      {touchSelection && (
+        <div className="mg-selection-bar" onPointerDown={(e) => e.preventDefault()}>
+          <button
+            className="mg-btn primary"
+            onClick={() => {
+              window.dispatchEvent(new Event('margin:apply-selection'));
+              setTouchSelection(false);
+            }}
+          >
+            {tool === 'highlight' ? <Highlighter size={16} /> : tool === 'underline' ? <Underline size={16} /> : <Strikethrough size={16} />}
+            {tool === 'highlight' ? 'Highlight' : tool === 'underline' ? 'Underline' : 'Strike through'}
+          </button>
+          <button
+            className="mg-btn"
+            onClick={() => {
+              window.getSelection()?.removeAllRanges();
+              setTouchSelection(false);
+            }}
+          >
+            Cancel
           </button>
         </div>
       )}
